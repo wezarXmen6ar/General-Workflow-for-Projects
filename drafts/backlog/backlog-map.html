@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Backlog · map</title>
+<style>
+:root{
+--bg:oklch(0.985 0.002 265);--s0:oklch(0.965 0.004 265);--s1:oklch(1 0 0);--s2:oklch(0.975 0.003 265);
+--ink:oklch(0.24 0.012 265);--ink2:oklch(0.48 0.012 265);
+--line:oklch(0.90 0.006 265);--line2:oklch(0.79 0.010 265);
+--t1bg:oklch(0.950 0.030 285);--t1tx:oklch(0.42 0.140 285);--t1ln:oklch(0.79 0.070 285);
+--t2bg:oklch(0.955 0.028 25);--t2tx:oklch(0.47 0.150 25);--t2ln:oklch(0.82 0.075 25);
+--t3bg:oklch(0.955 0.032 168);--t3tx:oklch(0.41 0.100 168);--t3ln:oklch(0.79 0.060 168);
+--t4bg:oklch(0.975 0.003 265);--t4tx:oklch(0.42 0.010 265);--t4ln:oklch(0.79 0.010 265);
+--t5bg:oklch(0.955 0.040 75);--t5tx:oklch(0.44 0.100 75);--t5ln:oklch(0.80 0.070 75);
+--new:oklch(0.62 0.15 60);--amd:oklch(0.53 0.16 255);--rp:oklch(0.53 0.20 300);--cut:oklch(0.55 0.19 25);
+--focus:oklch(0.47 0.200 268);
+--radius:8px;
+--ease:cubic-bezier(0.22,1,0.36,1);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+--bg:oklch(0.185 0.008 265);--s0:oklch(0.155 0.008 265);--s1:oklch(0.235 0.010 265);--s2:oklch(0.275 0.010 265);
+--ink:oklch(0.955 0.004 265);--ink2:oklch(0.725 0.008 265);
+--line:oklch(0.325 0.010 265);--line2:oklch(0.450 0.012 265);
+--t1bg:oklch(0.300 0.065 285);--t1tx:oklch(0.865 0.075 285);--t1ln:oklch(0.480 0.100 285);
+--t2bg:oklch(0.305 0.065 25);--t2tx:oklch(0.870 0.070 25);--t2ln:oklch(0.500 0.110 25);
+--t3bg:oklch(0.290 0.055 168);--t3tx:oklch(0.865 0.080 168);--t3ln:oklch(0.470 0.080 168);
+--t4bg:oklch(0.275 0.010 265);--t4tx:oklch(0.800 0.008 265);--t4ln:oklch(0.450 0.012 265);
+--t5bg:oklch(0.300 0.055 75);--t5tx:oklch(0.880 0.080 75);--t5ln:oklch(0.500 0.090 75);
+--new:oklch(0.82 0.14 75);--amd:oklch(0.76 0.13 255);--rp:oklch(0.77 0.17 300);--cut:oklch(0.74 0.15 25);
+--focus:oklch(0.87 0.140 250);
+}}
+:root[data-theme="dark"]{
+--bg:oklch(0.185 0.008 265);--s0:oklch(0.155 0.008 265);--s1:oklch(0.235 0.010 265);--s2:oklch(0.275 0.010 265);
+--ink:oklch(0.955 0.004 265);--ink2:oklch(0.725 0.008 265);
+--line:oklch(0.325 0.010 265);--line2:oklch(0.450 0.012 265);
+--t1bg:oklch(0.300 0.065 285);--t1tx:oklch(0.865 0.075 285);--t1ln:oklch(0.480 0.100 285);
+--t2bg:oklch(0.305 0.065 25);--t2tx:oklch(0.870 0.070 25);--t2ln:oklch(0.500 0.110 25);
+--t3bg:oklch(0.290 0.055 168);--t3tx:oklch(0.865 0.080 168);--t3ln:oklch(0.470 0.080 168);
+--t4bg:oklch(0.275 0.010 265);--t4tx:oklch(0.800 0.008 265);--t4ln:oklch(0.450 0.012 265);
+--t5bg:oklch(0.300 0.055 75);--t5tx:oklch(0.880 0.080 75);--t5ln:oklch(0.500 0.090 75);
+--new:oklch(0.82 0.14 75);--amd:oklch(0.76 0.13 255);--rp:oklch(0.77 0.17 300);--cut:oklch(0.74 0.15 25);
+--focus:oklch(0.87 0.140 250);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1220px;margin:0 auto;padding:28px 24px 40px}
+h1{margin:0;font-size:1.25rem;font-weight:500;letter-spacing:-0.01em}
+.meta{margin:4px 0 0;font-size:0.8125rem;color:var(--ink2)}
+.lg{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:20px 0 18px;font-size:0.8125rem;color:var(--ink2)}
+.kk{display:inline-block;padding:2px 9px;border-radius:var(--radius);font-size:0.8125rem;border:1px solid}
+.key{display:inline-flex;align-items:center;gap:6px;font-size:0.8125rem}
+.key i{display:inline-block;width:18px;height:0;border-top:2px solid}
+.key i.d{border-top-style:dashed}
+.key b{font-weight:600;font-size:0.625rem;letter-spacing:.02em;padding:2px 5px;border-radius:5px;color:var(--bg)}
+.sp{width:1px;height:14px;background:var(--line2)}
+.gr{position:relative;display:grid;gap:0 32px;justify-content:space-between}
+.lk{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+.e{fill:none;stroke:var(--line2);stroke-width:1.1;opacity:.5;transition:opacity .18s var(--ease)}
+.e.d{stroke-dasharray:4 4}
+.e.nw{stroke:var(--new);stroke-width:1.8;opacity:.9}
+.e.rp{stroke:var(--rp);stroke-width:2;opacity:.95}
+.gr.on .e{opacity:.07}
+.gr.on .e.nw,.gr.on .e.rp{opacity:.22}
+.hc{fill:none;stroke:var(--bg);stroke-width:7;stroke-linecap:round}
+.hl{fill:none;stroke:var(--focus);stroke-width:2.4;stroke-linecap:round}
+.hl.d{stroke-dasharray:6 4}
+.col{position:relative;z-index:1;min-width:0}
+.ch{font-size:0.75rem;font-weight:500;color:var(--ink2);padding-bottom:5px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.area{position:relative}
+.nd{position:absolute;left:0;top:0;display:block;width:100%;text-align:left;font:inherit;font-size:0.8125rem;line-height:1.35;padding:9px 11px;border-radius:var(--radius);border:1px solid;cursor:pointer;transition:opacity .18s var(--ease),box-shadow .18s var(--ease)}
+.nd.b{padding-right:26px}
+.gr.on .nd{opacity:.26}
+.gr.on .nd.hi{opacity:1}
+.nd:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.t1{background:var(--t1bg);color:var(--t1tx);border-color:var(--t1ln)}
+.t2{background:var(--t2bg);color:var(--t2tx);border-color:var(--t2ln)}
+.t3{background:var(--t3bg);color:var(--t3tx);border-color:var(--t3ln)}
+.t4{background:var(--t4bg);color:var(--t4tx);border-color:var(--t4ln)}
+.t5{background:var(--t5bg);color:var(--t5tx);border-color:var(--t5ln)}
+.nd.mk-new{border-style:dashed;border-color:var(--new);box-shadow:0 0 0 1px var(--new)}
+.nd.mk-amd{border-color:var(--amd);box-shadow:0 0 0 1px var(--amd)}
+.nd.mk-cut{border-style:dashed;border-color:var(--cut);box-shadow:0 0 0 1px var(--cut)}
+.nd.mk-cut .lb{text-decoration:line-through;opacity:.8}
+.nd.pin{box-shadow:0 0 0 2px var(--focus)}
+.tg{position:absolute;top:-8px;left:9px;font-size:0.625rem;line-height:1;padding:2px 5px;border-radius:5px;color:var(--bg);font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.tg.in{position:static;display:inline-block;margin-left:6px;vertical-align:1px}
+.tg.mk-new,.key b.mk-new{background:var(--new)}
+.tg.mk-amd,.key b.mk-amd{background:var(--amd)}
+.tg.mk-cut,.key b.mk-cut{background:var(--cut)}
+.key i.nw{border-color:var(--new)}
+.key i.rp{border-color:var(--rp)}
+.bg{position:absolute;top:7px;right:7px;width:17px;height:17px;border-radius:50%;font-size:0.6875rem;line-height:16px;text-align:center;background:var(--bg);border:1px solid currentColor}
+.dt{margin-top:18px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--s1);min-height:64px;font-size:0.875rem}
+.dt .ttl{display:block;margin-bottom:5px}
+.dt .sv{display:block;font-size:0.8125rem;color:var(--ink2);margin-top:2px}
+.dt .st{color:var(--ink2)}
+.dt b{font-weight:500}
+.rf{color:var(--ink2);font-size:0.75rem}
+.sum{margin-top:14px;padding:12px 16px;border:1px dashed var(--new);border-radius:12px;background:var(--s1);font-size:0.8125rem}
+.sum h2{margin:0 0 6px;font-size:0.8125rem;font-weight:600}
+.sum ul{margin:0;padding-left:18px}
+.sum li{margin:3px 0}
+.sum .no{color:var(--ink2)}
+noscript{display:block;margin:20px 0;color:var(--ink2)}
+@media (max-width:860px){.gr{grid-template-columns:1fr !important;gap:20px}.lk{display:none}.area{height:auto !important}.nd{position:relative;top:auto !important;margin-bottom:12px}}
+@media (prefers-reduced-motion:reduce){.e,.nd{transition:none}}
+@media print{.gr.on .e,.gr.on .nd{opacity:1}.nd.pin{box-shadow:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+<h1 id="ttl">Workflow map</h1>
+<p class="meta" id="mta"></p>
+</header>
+<div class="lg" id="lgd"></div>
+<noscript>This map needs JavaScript to draw the links between items.</noscript>
+<div class="gr" id="gr"><svg class="lk" id="lk" aria-hidden="true"></svg></div>
+<div class="dt" id="dt" aria-live="polite"></div>
+<div class="sum" id="sum" hidden></div>
+</div>
+
+<script>
+/* ===========================================================================
+   MAP TEMPLATE. Maps are generated from the text by `python tools/workflow.py
+   build`, which copies this file and replaces only the DATA block below.
+   Never edit a generated map by hand; edit the text and rebuild.
+
+     layers : columns, left to right. tone t1..t5 picks the colour.
+     nodes  : id, layer key, short label, full title,
+              ref  = the real ID (O-001, S-002, ...) for pushed items,
+              mark = "new" | "amended" | "cut" (optional).
+     links  : [child, parent, 1 = home parent (solid) | 0 = also serves (dashed),
+               "new" (optional) = a link this draft or version adds].
+              A new link between two items that already existed is shown in
+              its own colour automatically.
+   =========================================================================== */
+
+/* BEGIN DATA (generated by tools/workflow.py build; edit the text, not this map) */
+var DATA={
+"version":"Backlog",
+"note":"Generated from backlog.md by tools/workflow.py — edit the text, not this map",
+"layers":[
+
+],
+"nodes":[
+
+],
+"links":[
+
+]
+};
+/* END DATA */
+
+/* ============================== RENDER ================================== */
+(function(){
+var gr=document.getElementById("gr"),svg=document.getElementById("lk"),dt=document.getElementById("dt"),sum=document.getElementById("sum");
+var T={},up={},dn={},home={},kids={},LK={},nd={},cols=[],pin=null,PATH={};
+var MK={"new":"NEW","amended":"AMENDED","cut":"CUT"},MC={"new":"mk-new","amended":"mk-amd","cut":"mk-cut"};
+
+DATA.nodes.forEach(function(n){T[n.id]=n});
+var LINKS=DATA.links.filter(function(e){return T[e[0]]&&T[e[1]]});
+LINKS.forEach(function(e){
+(up[e[0]]=up[e[0]]||[]).push(e[1]);(dn[e[1]]=dn[e[1]]||[]).push(e[0]);LK[e[0]+"|"+e[1]]=e;
+if(e[2]){home[e[0]]=e[1];(kids[e[1]]=kids[e[1]]||[]).push(e[0])}});
+
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function mark(id){var m=T[id].mark;return MK[m]?m:""}
+/* "nw" = new link; "rp" = new link between two items that already existed */
+function kind(e){if(e[3]!=="new")return "";return mark(e[0])!=="new"&&mark(e[1])!=="new"?"rp":"nw"}
+function label(k){var l=DATA.layers.filter(function(x){return x.key===k})[0];return l?l.name.replace(/s$/,""):k}
+
+document.getElementById("ttl").textContent=DATA.version;
+document.title=DATA.version+" · map";
+var shared=DATA.nodes.filter(function(n){return(up[n.id]||[]).length>1}).length;
+var cnt={"new":0,"amended":0,"cut":0},nl=0,rp=0;
+DATA.nodes.forEach(function(n){if(mark(n.id))cnt[n.mark]++});
+LINKS.forEach(function(e){var k=kind(e);if(k)nl++;if(k==="rp")rp++});
+var marked=cnt["new"]+cnt.amended+cnt.cut+nl>0;
+document.getElementById("mta").textContent=[DATA.note,DATA.nodes.length+" items",LINKS.length+" links",shared+" serve more than one parent"].filter(Boolean).join("  ·  ");
+
+/* legend */
+var h="";
+DATA.layers.forEach(function(l){h+='<span class="kk '+l.tone+'">'+esc(label(l.key))+"</span>"});
+h+='<span class="sp"></span><span>Solid line: home parent</span><span class="sp"></span><span>Dashed: also serves</span><span class="sp"></span><span>Badge: number of parents</span>';
+if(marked){h+='<span class="sp"></span>';
+if(cnt["new"])h+='<span class="key"><b class="mk-new">NEW</b>not pushed yet</span>';
+if(cnt.amended)h+='<span class="key"><b class="mk-amd">AMENDED</b>changed</span>';
+if(cnt.cut)h+='<span class="key"><b class="mk-cut">CUT</b>retired</span>';
+if(nl-rp)h+='<span class="key"><i class="nw"></i>new link</span>';
+if(rp)h+='<span class="key"><i class="rp"></i>new link between existing items</span>'}
+h+='<span class="sp"></span><span>Hover to trace, click to pin, Esc to clear</span>';
+document.getElementById("lgd").innerHTML=h;
+
+/* columns and nodes */
+gr.style.gridTemplateColumns="repeat("+DATA.layers.length+",minmax(0,200px))";
+DATA.layers.forEach(function(l){
+var c=document.createElement("div");c.className="col";
+var ch=document.createElement("div");ch.className="ch";ch.textContent=l.name;c.appendChild(ch);
+var ar=document.createElement("div");ar.className="area";c.appendChild(ar);
+var ids=[];
+DATA.nodes.filter(function(n){return n.layer===l.key}).forEach(function(n){
+var p=(up[n.id]||[]).length,m=mark(n.id),b=document.createElement("button");
+b.type="button";b.className="nd "+l.tone+(p>1?" b":"")+(m?" "+MC[m]:"");b.dataset.id=n.id;
+b.title=(n.ref?n.ref+" — ":"")+n.full;
+var lb=document.createElement("span");lb.className="lb";lb.textContent=n.short||n.full;b.appendChild(lb);
+if(m){var tg=document.createElement("span");tg.className="tg "+MC[m];tg.textContent=MK[m]+" · "+label(l.key);b.appendChild(tg)}
+if(p>1){var s=document.createElement("span");s.className="bg";s.textContent=p;b.appendChild(s)}
+ar.appendChild(b);nd[n.id]=b;ids.push(n.id)});
+cols.push({area:ar,ids:ids});
+gr.appendChild(c)});
+
+/* layout: every child sits next to its home parent, every parent is centred on its children */
+var GAP=14,narrow=window.matchMedia("(max-width:860px)");
+function layout(){
+var Hh={},Y={};
+if(narrow.matches){cols.forEach(function(c){c.area.style.height="";c.ids.forEach(function(k){nd[k].style.top=""})});return}
+Object.keys(nd).forEach(function(k){Hh[k]=nd[k].offsetHeight});
+cols.forEach(function(c){var y=0;c.ids.forEach(function(k){Y[k]=y+Hh[k]/2;y+=Hh[k]+GAP})});
+function place(ids,want){
+/* closest positions to the wanted centres, keeping order and spacing (pool adjacent violators) */
+var bl=[],off=0,offs=[];
+ids.forEach(function(k,i){offs.push(off);bl.push({s:i,e:i,sum:want(k)-Hh[k]/2-off,n:1});off+=Hh[k]+GAP;
+while(bl.length>1){var b=bl[bl.length-1],a=bl[bl.length-2];if(a.sum/a.n>b.sum/b.n){a.e=b.e;a.sum+=b.sum;a.n+=b.n;bl.pop()}else break}});
+bl.forEach(function(b){var t=b.sum/b.n;for(var i=b.s;i<=b.e;i++){var k=ids[i];Y[k]=t+offs[i]+Hh[k]/2}})}
+for(var it=0;it<8;it++){
+for(var c=1;c<cols.length;c++)place(cols[c].ids,function(k){var p=home[k];return p!=null&&Y[p]!=null?Y[p]:Y[k]});
+for(var c2=cols.length-2;c2>=0;c2--)place(cols[c2].ids,function(k){var ch=kids[k];if(!ch||!ch.length)return Y[k];var s=0;ch.forEach(function(x){s+=Y[x]});return s/ch.length})}
+var top=Infinity,bot=0;
+Object.keys(Y).forEach(function(k){top=Math.min(top,Y[k]-Hh[k]/2)});
+if(top===Infinity)top=0;
+Object.keys(Y).forEach(function(k){var t=Y[k]-Hh[k]/2-top;nd[k].style.top=t+"px";bot=Math.max(bot,t+Hh[k])});
+cols.forEach(function(c){c.area.style.height=bot+"px"})}
+
+/* links, fanned along each node's edge instead of pinched into one point */
+function draw(){
+var gb=gr.getBoundingClientRect(),R={};
+svg.setAttribute("width",gb.width);svg.setAttribute("height",gb.height);
+svg.setAttribute("viewBox","0 0 "+gb.width+" "+gb.height);
+Object.keys(nd).forEach(function(k){var r=nd[k].getBoundingClientRect();
+R[k]={l:r.left-gb.left,r:r.right-gb.left,h:r.height,c:r.top-gb.top+r.height/2}});
+var asP={},asC={},AR={},AL={};
+LINKS.forEach(function(e){(asP[e[1]]=asP[e[1]]||[]).push(e);(asC[e[0]]=asC[e[0]]||[]).push(e)});
+function fan(list,node,end,out){
+list.sort(function(a,b){return R[a[end]].c-R[b[end]].c});
+var n=list.length,span=Math.max(0,Math.min(R[node].h-14,(n-1)*9)),y0=R[node].c-span/2;
+list.forEach(function(e,i){out[e[0]+"|"+e[1]]=n<2?R[node].c:y0+span/(n-1)*i})}
+Object.keys(asP).forEach(function(k){fan(asP[k],k,0,AR)});
+Object.keys(asC).forEach(function(k){fan(asC[k],k,1,AL)});
+var s=["","",""];PATH={};
+LINKS.forEach(function(e){
+var key=e[0]+"|"+e[1],x1=R[e[1]].r,y1=AR[key],x2=R[e[0]].l,y2=AL[key];
+var sb=Math.min(18,(x2-x1)*.22),a=x1+sb,b=x2-sb,m=(b-a)*.5;
+var d="M"+x1+" "+y1+"L"+a+" "+y1+"C"+(a+m)+" "+y1+" "+(b-m)+" "+y2+" "+b+" "+y2+"L"+x2+" "+y2;
+PATH[key]=d;var k=kind(e);
+s[k==="rp"?2:k?1:0]+='<path class="e'+(e[2]?"":" d")+(k?" "+k:"")+'" d="'+d+'"/>'});
+svg.innerHTML='<g>'+s.join("")+'</g><g id="hg"></g>'}
+
+function chain(id){var set={};set[id]=1;
+(function w(k,m){(m[k]||[]).forEach(function(v){if(!set[v]){set[v]=1;w(v,m)}})})(id,up);
+(function w(k,m){(m[k]||[]).forEach(function(v){if(!set[v]){set[v]=1;w(v,m)}})})(id,dn);
+return set}
+
+function nm(x){var n=T[x];return esc(n.full)+(n.ref?' <span class="rf">'+esc(n.ref)+"</span>":"")}
+function note(c,p){var e=LK[c+"|"+p],k=kind(e);return k?" <i>(new "+(e[2]?"home":"also-serves")+" link"+(k==="rp"?", between existing items":"")+")</i>":""}
+function info(id){var n=T[id],m=mark(id),ps=(up[id]||[]).slice(),cs=dn[id]||[];
+ps.sort(function(a,b){return LK[id+"|"+b][2]-LK[id+"|"+a][2]});
+var h='<span class="ttl"><b>'+esc(label(n.layer))+(n.ref?" "+esc(n.ref):"")+"</b> — "+esc(n.full)+(m?'<span class="tg in '+MC[m]+'">'+MK[m]+"</span>":"")+"</span>";
+if(ps.length)h+='<span class="sv">Serves '+ps.length+": "+ps.map(function(x){return nm(x)+note(id,x)}).join("  ·  ")+"</span>";
+if(cs.length)h+='<span class="sv">Served by '+cs.length+": "+cs.map(function(x){return nm(x)+note(x,id)}).join("  ·  ")+"</span>";
+return h}
+
+var DEF=DATA.nodes.length?'<span class="st">'+DATA.nodes.length+" items, "+LINKS.length+' links. <b>'+shared+" of them serve more than one parent</b> and carry a badge."+
+(marked?" Marked: "+[cnt["new"]+" new",cnt.amended+" amended",cnt.cut+" cut",nl+" new links"].join(", ")+".":"")+"</span>"
+:'<span class="st">Nothing here yet. Add entries to the text, then run <b>python tools/workflow.py build</b>.</span>';
+
+function focus(id){
+var hg=document.getElementById("hg");
+if(!id){gr.classList.remove("on");dt.innerHTML=DEF;if(hg)hg.innerHTML="";return}
+var set=chain(id);gr.classList.add("on");
+Object.keys(nd).forEach(function(k){nd[k].classList.toggle("hi",!!set[k])});
+/* every casing first, then every line, so highlighted links read clearly where they cross */
+var cas="",ln="";
+LINKS.forEach(function(e){
+if(!(set[e[0]]&&set[e[1]]))return;
+var d=PATH[e[0]+"|"+e[1]];if(!d)return;
+cas+='<path class="hc" d="'+d+'"/>';
+ln+='<path class="hl'+(e[2]?"":" d")+'" d="'+d+'"/>'});
+hg.innerHTML=cas+ln;
+dt.innerHTML=info(id)}
+
+/* written breakdown of what this draft or version changes */
+if(marked){
+var by={},am=[],ct=[],hl=[],al=[],bx=[];
+DATA.nodes.forEach(function(n){var m=mark(n.id),t=label(n.layer);
+if(m==="new")(by[t]=by[t]||[]).push(esc(n.full));
+if(m==="amended")am.push(nm(n.id));
+if(m==="cut")ct.push(nm(n.id))});
+LINKS.forEach(function(e){var k=kind(e);if(!k)return;var t=esc(T[e[0]].short||T[e[0]].full)+" → "+esc(T[e[1]].short||T[e[1]].full);
+(e[2]?hl:al).push(t);if(k==="rp")bx.push(t)});
+function li(t,a){return "<li><b>"+t+" ("+a.length+"):</b> "+(a.length?a.join(", "):'<span class="no">none</span>')+"</li>"}
+var sh="<h2>What this map changes</h2><ul>";
+DATA.layers.forEach(function(l){var t=label(l.key);if(by[t])sh+=li("New "+t.toLowerCase()+(by[t].length>1?"s":""),by[t])});
+if(!cnt["new"])sh+=li("New items",[]);
+sh+=li("Amended",am)+li("Cut",ct)+li("New home-parent links",hl)+li("New also-serves links",al)+li("New links between items that already existed",bx)+"</ul>";
+sum.innerHTML=sh;sum.hidden=false}
+
+Object.keys(nd).forEach(function(k){var b=nd[k];
+b.addEventListener("mouseenter",function(){if(!pin)focus(k)});
+b.addEventListener("mouseleave",function(){if(!pin)focus(null)});
+b.addEventListener("focus",function(){if(!pin)focus(k)});
+b.addEventListener("click",function(){
+if(pin===k){pin=null;b.classList.remove("pin");focus(null)}
+else{if(pin)nd[pin].classList.remove("pin");pin=k;b.classList.add("pin");focus(k)}})});
+
+document.addEventListener("keydown",function(e){
+if(e.key==="Escape"&&pin){nd[pin].classList.remove("pin");pin=null;focus(null)}});
+
+function redraw(){layout();draw();if(pin)focus(pin)}
+dt.innerHTML=DEF;redraw();
+var lastW=gr.offsetWidth;
+function onResize(){var w=gr.offsetWidth;if(w!==lastW){lastW=w;redraw()}}
+if(window.ResizeObserver)new ResizeObserver(onResize).observe(gr);
+window.addEventListener("resize",onResize);
+if(narrow.addEventListener)narrow.addEventListener("change",redraw);
+})();
+</script>
+</body>
+</html>

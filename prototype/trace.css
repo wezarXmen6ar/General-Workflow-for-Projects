@@ -1,0 +1,27 @@
+/* "!" markers (see trace.js). Override the --trace-* colours to match the prototype. */
+:root{
+--trace-accent:oklch(0.47 0.200 268);--trace-on-accent:oklch(0.985 0.002 265);--trace-unknown:oklch(0.55 0.190 25);
+--trace-bg:oklch(1 0 0);--trace-ink:oklch(0.24 0.012 265);--trace-ink2:oklch(0.48 0.012 265);--trace-line:oklch(0.79 0.010 265);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+--trace-accent:oklch(0.72 0.150 260);--trace-on-accent:oklch(0.155 0.008 265);--trace-unknown:oklch(0.74 0.150 25);
+--trace-bg:oklch(0.235 0.010 265);--trace-ink:oklch(0.955 0.004 265);--trace-ink2:oklch(0.725 0.008 265);--trace-line:oklch(0.450 0.012 265);
+}}
+:root[data-theme="dark"]{
+--trace-accent:oklch(0.72 0.150 260);--trace-on-accent:oklch(0.155 0.008 265);--trace-unknown:oklch(0.74 0.150 25);
+--trace-bg:oklch(0.235 0.010 265);--trace-ink:oklch(0.955 0.004 265);--trace-ink2:oklch(0.725 0.008 265);--trace-line:oklch(0.450 0.012 265);
+}
+.trace-anchor{position:relative}
+:is(h1,h2,h3,h4,h5,h6,label).trace-anchor{width:fit-content}
+.trace-badge{position:absolute;top:-8px;right:-8px;width:16px;height:16px;border-radius:50%;border:none;padding:0;z-index:5;
+background:var(--trace-accent);color:var(--trace-on-accent);font:700 0.6875rem/16px ui-sans-serif,system-ui,sans-serif;text-align:center;cursor:help}
+.trace-badge.unknown{background:var(--trace-unknown)}
+.trace-badge.pin,.trace-badge:focus-visible{outline:2px solid var(--trace-accent);outline-offset:2px}
+.trace-tip{display:none;position:absolute;top:14px;right:-8px;z-index:20;width:300px;max-width:80vw;
+background:var(--trace-bg);color:var(--trace-ink);border:1px solid var(--trace-line);border-radius:8px;padding:10px 12px;
+box-shadow:0 6px 20px rgba(0,0,0,.14);font:400 0.75rem/1.4 ui-sans-serif,system-ui,sans-serif;text-align:left;letter-spacing:normal;text-transform:none}
+.trace-tip.on{display:block}
+.tc-hd{font-size:0.8125rem;margin-bottom:6px}
+.tc-ty,.tc-row{color:var(--trace-ink2);font-weight:400}
+.tc-row{padding:1px 0}
+.tc-sep{height:1px;background:var(--trace-line);margin:6px 0}

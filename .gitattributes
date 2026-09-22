@@ -1,0 +1,2 @@
+# Store text with LF in the repository so diffs only show real changes.
+* text=auto
