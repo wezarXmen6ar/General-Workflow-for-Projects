@@ -1,6 +1,6 @@
 # Draft vX
 
-**Status:** Pending
+**Status:** Active
 **Map:** [draft-vX-map.html](draft-vX-map.html) (generated: edit this text, not the map)
 
 One small push. Nothing here has an ID yet; IDs are given when the draft is pushed. Refer to pushed items by ID (S-002) and to entries in this draft by their exact title in double quotes ("Title"). Put any explanation after " — ".

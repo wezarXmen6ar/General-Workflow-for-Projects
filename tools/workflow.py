@@ -6,8 +6,8 @@ Run from the project root (or anywhere; paths are relative to the folder above t
   python tools/workflow.py check [--push DRAFT]    report problems; changes nothing
   python tools/workflow.py build [--dry-run]       regenerate back-links, draft overviews, copies, maps, prototype chain
   python tools/workflow.py next-ids                next free ID of each kind
-  python tools/workflow.py new-draft VERSION [--active]
-                                                   create drafts/VERSION/ from templates/draft.md
+  python tools/workflow.py new-draft VERSION
+                                                   create drafts/VERSION/ (only when no other draft is open)
   python tools/workflow.py record-push VERSION [--draft DRAFT]
                                                    save versions/VERSION/, add the log entry, freeze the draft
 
@@ -1014,9 +1014,10 @@ def run_checks(ctx):
         if text != main.files[doc].text:
             issues.error(doc, 0, '"Served by" lines are out of date; run build')
     # drafts
-    active = [d for d in ctx.drafts if d.active]
-    if len(active) > 1:
-        issues.error("drafts", 0, "only one draft can be Active: " + ", ".join(d.rel for d in active))
+    open_drafts = [d for d in ctx.drafts if not d.frozen and not d.is_backlog]
+    if len(open_drafts) > 1:
+        issues.error("drafts", 0, "only one draft can exist at a time (the next push); move the others' ideas "
+                                  "to the backlog and retire them: " + ", ".join(d.rel for d in open_drafts))
     titles = {}
     for d in ctx.drafts:
         s = d.status.lower()
@@ -1024,8 +1025,8 @@ def run_checks(ctx):
             issues.error(d.rel, 0, 'no "**Status:**" line')
         elif d.is_backlog and s != "backlog":
             issues.error(d.rel, 0, 'the backlog\'s status is "Backlog"')
-        elif not d.is_backlog and not (s in ("active", "pending") or d.frozen):
-            issues.error(d.rel, 0, 'status must be Active, Pending, "Pushed as vX on <date>" or "Retired on <date>"')
+        elif not d.is_backlog and not (s == "active" or d.frozen):
+            issues.error(d.rel, 0, 'status must be Active, "Pushed as vX on <date>" or "Retired on <date>"')
         if d.frozen:
             continue
         if not d.has_entries:
@@ -1226,10 +1227,11 @@ def cmd_new_draft(args):
     if latest and version_key(v) <= version_key(latest.name):
         raise SystemExit(f"Version numbers only go up: the latest is {latest.name}")
     ctx = Context()
-    if args.active and any(d.active for d in ctx.drafts):
-        raise SystemExit("Another draft is Active. Set it to Pending (or push it) first, or create this one without --active.")
+    open_drafts = [d.rel for d in ctx.drafts if not d.frozen and not d.is_backlog]
+    if open_drafts:
+        raise SystemExit(f"Only one draft at a time: push {open_drafts[0]} first (or retire it and move its ideas to the backlog).")
     text = TextFile(TEMPLATE_DRAFT).text.replace("vX", v)
-    text = re.sub(r"^\*\*Status:\*\*.*$", "**Status:** " + ("Active" if args.active else "Pending"), text, count=1, flags=re.M)
+    text = re.sub(r"^\*\*Status:\*\*.*$", "**Status:** Active", text, count=1, flags=re.M)
     writer = Writer(frozen=ctx.frozen_paths())
     writer.write(folder / f"draft-{v}.md", text)
     build(Context(), writer)
@@ -1310,12 +1312,11 @@ def main(argv=None):
     b = sub.add_parser("build", help="regenerate everything derived from the text")
     b.add_argument("--dry-run", action="store_true", help="show what would change without writing")
     sub.add_parser("next-ids", help="next free ID of each kind")
-    n = sub.add_parser("new-draft", help="create drafts/VERSION/ from templates/draft.md")
+    n = sub.add_parser("new-draft", help="create drafts/VERSION/ (only when no other draft is open)")
     n.add_argument("version")
-    n.add_argument("--active", action="store_true", help="make it the Active draft")
     r = sub.add_parser("record-push", help="save versions/VERSION/, add the log entry, freeze the draft")
     r.add_argument("version")
-    r.add_argument("--draft", metavar="DRAFT", help="the draft being pushed (default: the Active one)")
+    r.add_argument("--draft", metavar="DRAFT", help="the draft being pushed (default: the open draft)")
     args = p.parse_args(argv)
     return {"check": cmd_check, "build": cmd_build, "next-ids": cmd_next_ids,
             "new-draft": cmd_new_draft, "record-push": cmd_record_push}[args.cmd](args)

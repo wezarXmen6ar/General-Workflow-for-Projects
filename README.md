@@ -11,7 +11,7 @@ Objective > Problem > Solution > Sub-solution (optional) > Feature
 1. Create a repository from this one (GitHub's "Use this template", or clone it, delete `.git`, and run `git init`).
 2. Open the folder in Claude Code. It reads `CLAUDE.md`, which holds all the rules.
 3. Talk about the project. Claude captures ideas in the backlog and sorts them into objectives, problems, solutions, and features.
-4. Pick a small first slice into the active draft (`drafts/v0.1/`) and give the green light to push it.
+4. Pick a small first slice into the draft (`drafts/v0.1/`) and give the green light to push it.
 5. Build the prototype from the pushed features, then repeat with the next small slice.
 
 You need Python 3.8 or newer (standard library only) and git.

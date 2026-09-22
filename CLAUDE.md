@@ -30,15 +30,14 @@ Objective (O-001) > Problem (P-001) > Solution (S-001) > Sub-solution (S-002, op
 
 # Drafts and backlog
 
-- Anything that could become an item goes into the backlog or a draft first, never straight into the main documents.
+- Anything that could become an item goes into the backlog or the draft first, never straight into the main documents.
 - **Capture fast.** A new idea goes into the backlog's Inbox as one line, unless the user says it is for the next push. Don't stop the conversation to ask about parents; note a likely one if it's obvious.
 - **The backlog** (drafts/backlog/backlog.md) holds every idea that is not in a draft. It is never pushed as a whole.
-- **A draft** (drafts/vX/draft-vX.md) is one small push. The active draft is the one whose status is Active; only one can be Active. Create one with `python tools/workflow.py new-draft vX`. Ideas move between the backlog and a draft: moved, never copied.
+- **Only one draft exists at a time:** the next push (drafts/vX/draft-vX.md, status Active). Everything else waits in the backlog. Create the next draft with `python tools/workflow.py new-draft vX` only after the current one is pushed. Ideas move between the backlog and the draft: moved, never copied.
 - **Before a push, every entry needs its full chain:** a type, a home parent, and any also-serves parents, each pointing to a pushed ID or to an entry in the same draft. This is when to ask the user about parents.
 - **A draft never copies pushed solutions or features;** it refers to them by ID. To change a pushed item, add an Amendment entry that names its ID. To retire one, add an Amendment with "Retire: yes"; a retired item stays in the documents with "Status: Retired".
 - **Every draft shows the full text of every pushed objective and problem,** so it can be read on its own. The tool copies them in; edit objectives.md and problems.md, never the copy.
-- Several drafts can exist at once (for example a fix release and the next scope). None of them copy each other or pushed items, so nothing ever needs mirroring.
-- **Nothing is deleted silently.** An idea that is cut goes back to the backlog, or to its Dropped section with the date and the reason. A draft that is abandoned gets the status "Retired on <date>" and its ideas move to the backlog; the file is then frozen.
+- **Nothing is deleted silently.** An idea that is cut goes back to the backlog, or to its Dropped section with the date and the reason. If the draft is abandoned, it gets the status "Retired on <date>" and its ideas move to the backlog; the file is then frozen.
 - In "Serves" and "Also serves", write IDs (S-002) or exact titles in double quotes ("Title"). Any explanation goes after " — ".
 
 # The mind map
@@ -84,4 +83,4 @@ Only on the user's clear green light.
 
 # Analysis
 
-When the user shares project information, sort it into objectives, problems, solutions, sub-solutions, and features: in the backlog, or in the active draft if it is for the next push. Never straight into the main documents.
+When the user shares project information, sort it into objectives, problems, solutions, sub-solutions, and features: in the backlog, or in the draft if it is for the next push. Never straight into the main documents.

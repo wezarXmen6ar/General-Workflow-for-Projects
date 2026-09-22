@@ -2,6 +2,12 @@
 
 Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, or removed, and why.
 
+## Workflow 1.1 (2026-09-23)
+
+| Rule | Status | Now |
+|---|---|---|
+| Several drafts at once, only one Active | Changed | Only one draft exists at a time: the next push. Everything else waits in the backlog. `new-draft` refuses while a draft is open, and `check` reports an error if two exist. The "Pending" status is gone. |
+
 ## Workflow 1.0 (2026-09-23)
 
 First generic release. Compared with the earlier version of this workflow, it cuts manual bookkeeping, keeps each fact in one place, and adds safety checks that run on their own.
