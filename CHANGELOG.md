@@ -1,6 +1,25 @@
 # Changelog
 
-Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, or removed, and why.
+Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, removed, or fixed, and why.
+
+## Workflow 1.2 (2026-09-23)
+
+A consistency pass: places where the rules contradicted each other or the tool.
+
+| Rule | Status | Now |
+|---|---|---|
+| Any pushed item can be retired | Fixed | The tool refused "Status: Retired" on objectives, which blocked the push. Objectives can now be retired like everything else. |
+| Serving a retired item | Fixed | Flagged for "Also serves" too, not only for the home parent. |
+| Drafts show the full text of every objective and problem | Fixed | Only current (not retired) ones, the same items their maps show, so text and map agree. The backlog shows them too. |
+| Only the user marks Solved or Done | Changed | Done through an Amendment in the draft, because the main documents change only through a push. |
+| One draft at a time | Changed | Worded as "one open draft at a time": pushed and retired drafts stay in drafts/ as frozen records. |
+| An abandoned draft | Changed | Its version number is not reused (the tool already refused it; now the rules and the tool's message say so). |
+| NEW, AMENDED and CUT marks | Changed | They start once anything is pushed; before that everything is new, and the first version's map has nothing marked. |
+| Drafts have no IDs | Changed | New entries have no ID; drafts refer to pushed items by ID. The main documents use IDs only. |
+| An objective is done when its problems are solved | Changed | Retired problems don't count (the tool already worked this way). |
+| Retired and rolled-back features | New | They are taken out of the prototype (`check` already reported them). |
+| Amendments | Changed | The template says what an amendment can carry: new text, a link to remove, or a Solved or Done mark. |
+| Starting a project from this repository | Changed | "Use this template" works only once the repository is marked as a template; cloning always works. |
 
 ## Workflow 1.1 (2026-09-23)
 

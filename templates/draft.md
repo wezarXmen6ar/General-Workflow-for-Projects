@@ -3,7 +3,7 @@
 **Status:** Active
 **Map:** [draft-vX-map.html](draft-vX-map.html) (generated: edit this text, not the map)
 
-One small push. Nothing here has an ID yet; IDs are given when the draft is pushed. Refer to pushed items by ID (S-002) and to entries in this draft by their exact title in double quotes ("Title"). Put any explanation after " — ".
+One small push. New entries have no ID yet; they get one when the draft is pushed. Refer to pushed items by ID (S-002) and to entries in this draft by their exact title in double quotes ("Title"). Put any explanation after " — ".
 
 ## Overview
 
@@ -33,7 +33,7 @@ To change something that is already pushed:
 ### What changes
 - Type: Amendment
 - Amends: S-002
-- Description: what changes and why
+- Description: what changes and why (new text, a link to remove, or a Solved or Done mark)
 - Serves: (only if the item moves to a new home parent)
 - Also serves: (only the links it adds)
 - Retire: yes (only to retire the item)
@@ -43,7 +43,7 @@ To change something that is already pushed:
 
 ## Pushed objectives and problems
 
-Copied from objectives.md and problems.md by the tool, so this draft can be read on its own. Edit those files, not this section.
+The current (not retired) objectives and problems, copied from objectives.md and problems.md by the tool so this draft can be read on its own. Edit those files, not this section.
 
 <!-- BEGIN GENERATED: copied -->
 <!-- END GENERATED: copied -->

@@ -14,6 +14,6 @@ What stands in the way of the objectives. Only pushed entries live here, and thi
 - Served by: (generated)
 ```
 
-A problem has one home objective ("Serves") and may also serve others ("Also serves"). Only the user marks it Solved.
+A problem has one home objective ("Serves") and may also serve others ("Also serves"). Only the user marks it Solved, through an Amendment in the draft.
 
 ---

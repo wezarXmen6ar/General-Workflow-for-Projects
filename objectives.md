@@ -8,10 +8,10 @@ What the project must achieve. Only pushed entries live here, and this file chan
 ## O-001: Title
 - Description:
 - Label: (optional, 2–4 words for the map)
-- Status: Open | Done
+- Status: Open | Done | Retired
 - Served by: (generated)
 ```
 
-An objective is done when every problem that serves it is solved. Only the user marks it Done.
+An objective is done when every problem that serves it (retired ones don't count) is solved. Only the user marks it Done, through an Amendment in the draft.
 
 ---

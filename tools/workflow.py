@@ -382,8 +382,8 @@ def check_main(main, issues):
         if not b.get("description").strip():
             issues.todo(where, b.line(), f"{it.id} has no description")
         if it.type == "objective":
-            if it.status not in ("open", "done"):
-                issues.error(where, b.line("status"), f"{it.id}: Status must be Open or Done")
+            if it.status not in ("open", "done", "retired"):
+                issues.error(where, b.line("status"), f"{it.id}: Status must be Open, Done or Retired")
             if b.get("serves").strip() and b.get("serves").strip().lower() != "none":
                 issues.warn(where, b.line("serves"), f"{it.id}: objectives have no parent; Serves is ignored")
         else:
@@ -420,6 +420,8 @@ def check_main(main, issues):
                 elif p.type not in allowed:
                     issues.error(where, b.line("also serves"),
                                  f"{it.id} ({TYPE_NAME[it.type]}) cannot serve {p.id} ({TYPE_NAME[p.type]})")
+                elif p.retired and not it.retired:
+                    issues.warn(where, b.line("also serves"), f"{it.id} also serves {p.id}, which is retired")
             if it.type == "problem" and it.status not in ("open", "solved", "retired"):
                 issues.error(where, b.line("status"), f"{it.id}: Status must be Open, Solved or Retired")
             if it.type in ("solution", "sub-solution", "feature") and it.status not in ("", "active", "retired"):
@@ -844,13 +846,13 @@ def version_graph(version, main, prev):
 def copied_block(main):
     out = []
     for doc, heading in (("objectives.md", "Objectives"), ("problems.md", "Problems")):
-        items = [it for it in main.ordered() if it.doc == doc]
+        items = [it for it in main.ordered() if it.doc == doc and not it.retired]
         if items:
             out += [f"### {heading}", ""]
             for it in items:
                 out += main.entry_text(it, shift=2) + [""]
     if not out:
-        return "No objectives or problems have been pushed yet."
+        return "No current objectives or problems yet."
     while out and not out[-1]:
         out.pop()
     return "\n".join(out)
@@ -1016,8 +1018,8 @@ def run_checks(ctx):
     # drafts
     open_drafts = [d for d in ctx.drafts if not d.frozen and not d.is_backlog]
     if len(open_drafts) > 1:
-        issues.error("drafts", 0, "only one draft can exist at a time (the next push); move the others' ideas "
-                                  "to the backlog and retire them: " + ", ".join(d.rel for d in open_drafts))
+        issues.error("drafts", 0, "only one draft can be open at a time (the next push); move the others' entries "
+                                  "to the backlog and mark them Retired: " + ", ".join(d.rel for d in open_drafts))
     titles = {}
     for d in ctx.drafts:
         s = d.status.lower()
@@ -1220,6 +1222,9 @@ def cmd_new_draft(args):
         raise SystemExit("Version looks like v0.2 or v0.1.1")
     folder = DRAFTS / v
     if folder.exists():
+        old = [Draft(f) for f in folder.glob("draft-*.md")]
+        if any(d.status.lower().startswith("retired") for d in old):
+            raise SystemExit(f"{v} belonged to a draft that was abandoned (Retired); numbers are not reused, pick the next one")
         raise SystemExit(f"{rel(folder)} already exists")
     if (VERSIONS / v).exists():
         raise SystemExit(f"{v} was already pushed; pick a new number")
@@ -1229,7 +1234,8 @@ def cmd_new_draft(args):
     ctx = Context()
     open_drafts = [d.rel for d in ctx.drafts if not d.frozen and not d.is_backlog]
     if open_drafts:
-        raise SystemExit(f"Only one draft at a time: push {open_drafts[0]} first (or retire it and move its ideas to the backlog).")
+        raise SystemExit(f"Only one draft can be open at a time: push {open_drafts[0]} first "
+                         "(or move its entries to the backlog and mark it Retired).")
     text = TextFile(TEMPLATE_DRAFT).text.replace("vX", v)
     text = re.sub(r"^\*\*Status:\*\*.*$", "**Status:** Active", text, count=1, flags=re.M)
     writer = Writer(frozen=ctx.frozen_paths())

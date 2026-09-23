@@ -3,7 +3,7 @@
 **Status:** Backlog
 **Map:** [backlog-map.html](backlog-map.html) (generated: edit this text, not the map)
 
-Every idea that is not in a draft yet. The backlog is never pushed as a whole: ideas move from here into a draft when the user picks them (moved, never copied).
+Every idea that is not in the open draft. The backlog is never pushed as a whole: ideas move from here into a draft when the user picks them (moved, never copied).
 
 ## Overview
 
@@ -33,8 +33,8 @@ Nothing yet.
 
 ## Pushed objectives and problems
 
-Copied from objectives.md and problems.md by the tool. Edit those files, not this section.
+The current (not retired) objectives and problems, copied from objectives.md and problems.md by the tool. Edit those files, not this section.
 
 <!-- BEGIN GENERATED: copied -->
-No objectives or problems have been pushed yet.
+No current objectives or problems yet.
 <!-- END GENERATED: copied -->
