@@ -21,6 +21,22 @@ A consistency pass: places where the rules contradicted each other or the tool.
 | Amendments | Changed | The template says what an amendment can carry: new text, a link to remove, or a Solved or Done mark. |
 | Starting a project from this repository | Changed | "Use this template" works only once the repository is marked as a template; cloning always works. |
 
+## Workflow 1.3 (2026-09-23)
+
+A folder structure that follows the work: plan, drafts, versions, prototype, product.
+
+| Rule | Status | Now |
+|---|---|---|
+| Main documents and prototype.md at the top level | Changed | In plan/, with plan/map.html showing everything pushed. The top level keeps only CLAUDE.md and README.md. |
+| Pushed and abandoned drafts kept in drafts/ as frozen records (1.2) | Changed | drafts/ holds only backlog.md and the one open draft. At a push the draft moves into versions/vX/; an abandoned draft moves into versions/abandoned/ with the new `abandon-draft` command. Both stay frozen there, and abandoned numbers are still never reused. |
+| A version folder holds the three documents and the map | Changed | versions/vX/ holds everything about the version: the plan as pushed (with prototype.md), its map, the draft that proposed it, and the prototype built for it. |
+| The prototype is one live folder | Changed | Still one live prototype/, and `save-prototype vX` keeps a frozen copy of each version's prototype, so versions can be compared. The log's Prototype line records it. |
+| The real product | New | product/ starts at v1.0. Each piece of product code names the feature ID it builds. |
+| Tool and templates in tools/ and templates/ | Changed | Together in workflow/ (tool.py, map-template.html, draft-template.md, CHANGELOG.md). |
+| The prototype's "!" marker files | Changed | In prototype/trace/. |
+| Moving to this workflow from an older one | New | Older dotted IDs (S-002.1) are read as they are, never renamed. Old back-link lines are ignored when versions are compared. Frozen files are checked from their last move, and history/ keeps old files, frozen. |
+| `record-push` | Changed | Takes an optional `--note` for the log. |
+
 ## Workflow 1.1 (2026-09-23)
 
 | Rule | Status | Now |

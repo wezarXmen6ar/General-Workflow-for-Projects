@@ -9,7 +9,7 @@
 
    Hovering (or focusing) the "!" shows the item's ID, name, and every path up
    to its objectives. Click to pin, Esc to unpin. The chain data comes from
-   chain.js, which tools/workflow.py build generates from the documents.
+   chain.js, which workflow/tool.py build generates from the documents.
    =========================================================================== */
 (function () {
   var pinned = [];

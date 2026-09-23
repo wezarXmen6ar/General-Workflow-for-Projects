@@ -5,7 +5,25 @@ Keep all responses summarized, simple, straight to the point, clear, and easy to
 # What belongs in this file
 
 - Only how we work: rules, process, and formats. No project content.
-- Project content lives in objectives.md, problems.md, solutions.md, the drafts, and prototype.md.
+- Project content lives in plan/, drafts/, versions/, prototype/, and product/.
+
+# Folders
+
+```
+CLAUDE.md     how we work
+README.md     what this project is
+plan/         WHAT and WHY: objectives.md, problems.md, solutions.md, prototype.md, map.html
+drafts/       NEXT: backlog.md and the one open draft (each with its map)
+versions/     HISTORY: log.md, one frozen folder per version, and abandoned/ for drafts given up
+prototype/    NOW: the live prototype, improved version by version (trace/ holds the "!" markers)
+product/      LATER: the real platform, started at v1.0
+workflow/     the machinery: tool.py, the templates, CHANGELOG.md
+history/      only in projects that switched from an older way of working: old files, frozen
+```
+
+- Work moves through the folders: idea → drafts/backlog.md → drafts/draft-vX.md → push → plan/ and versions/vX/ → prototype/ → saved in versions/vX/prototype/ → next draft … → v1.0 → product/.
+- **One version, one folder:** versions/vX/ holds the plan as pushed, its map, the draft that proposed it, and the prototype built for it.
+- drafts/ is always editable. versions/ and history/ are always frozen.
 
 # The hierarchy
 
@@ -25,62 +43,68 @@ Objective (O-001) > Problem (P-001) > Solution (S-001) > Sub-solution (S-002, op
 
 - IDs are flat: O-001, P-001, S-001, F-001. Solutions and sub-solutions share the S- numbers.
 - An item gets its ID when it is pushed. New entries in a draft have no ID; a draft refers to pushed items by their IDs.
-- An ID is permanent: it never changes, even if the item moves to another parent, and it is never reused, even after the item is retired.
-- Take new IDs from `python tools/workflow.py next-ids`.
+- An ID is permanent: it never changes, even if the item moves to another parent, and it is never reused, even after the item is retired. Older dotted IDs (S-002.1) stay exactly as they are.
+- Take new IDs from `python workflow/tool.py next-ids`.
 
 # Drafts and backlog
 
-- Anything that could become an item goes into the backlog or the draft first, never straight into the main documents.
+- Anything that could become an item goes into the backlog or the draft first, never straight into plan/.
 - **Capture fast.** A new idea goes into the backlog's Inbox as one line, unless the user says it is for the next push. Don't stop the conversation to ask about parents; note a likely one if it's obvious.
-- **The backlog** (drafts/backlog/backlog.md) holds every idea that is not in the open draft. It is never pushed as a whole.
-- **Only one draft is open at a time:** the next push (drafts/vX/draft-vX.md, status Active). Everything else waits in the backlog. Create the next draft with `python tools/workflow.py new-draft vX` only when no draft is open (the last one was pushed or abandoned). Pushed and retired drafts stay in drafts/ as frozen records. Ideas move between the backlog and the draft: moved, never copied.
+- **The backlog** (drafts/backlog.md) holds every idea that is not in the open draft. It is never pushed as a whole.
+- **Only one draft is open at a time:** the next push (drafts/draft-vX.md, status Active). Everything else waits in the backlog. Start the next draft with `python workflow/tool.py new-draft vX` only when no draft is open. A pushed draft moves into its version folder, an abandoned one into versions/abandoned/; both stay there as frozen records. Ideas move between the backlog and the draft: moved, never copied.
 - **Before a push, every entry needs its full chain:** a type, a home parent, and any also-serves parents, each pointing to a pushed ID or to an entry in the same draft. This is when to ask the user about parents.
-- **A draft never copies pushed solutions or features;** it refers to them by ID. To change a pushed item, add an Amendment entry that names its ID. To retire one, add an Amendment with "Retire: yes"; a retired item stays in the documents with "Status: Retired".
-- **Every draft, and the backlog, shows the full text of every current (not retired) objective and problem,** so it can be read on its own. The tool copies them in; edit objectives.md and problems.md, never the copy.
-- **Nothing is deleted silently.** An idea that is cut goes back to the backlog, or to its Dropped section with the date and the reason. If the draft is abandoned, its ideas move to the backlog and it gets the status "Retired on <date>"; the file is then frozen and its version number is not reused.
-- In a draft's "Serves" and "Also serves", write IDs (S-002) or exact titles in double quotes ("Title"). Any explanation goes after " — ". The main documents use IDs only.
+- **A draft never copies pushed solutions or features;** it refers to them by ID. To change a pushed item, add an Amendment entry that names its ID. To retire one, add an Amendment with "Retire: yes"; a retired item stays in the plan with "Status: Retired".
+- **The draft and the backlog show the full text of every current (not retired) objective and problem,** so each can be read on its own. The tool copies them in; edit plan/objectives.md and plan/problems.md, never the copy.
+- **Nothing is deleted silently.** An idea that is cut goes back to the backlog, or to its Dropped section with the date and the reason. To abandon the draft, run `python workflow/tool.py abandon-draft`: its entries go back to the backlog, and the draft is kept, frozen, in versions/abandoned/ with the status "Retired on <date>". Its version number is not reused.
+- In a draft's "Serves" and "Also serves", write IDs (S-002) or exact titles in double quotes ("Title"). Any explanation goes after " — ". The plan uses IDs only.
 
 # The mind map
 
-- "The mind map" is always a map generated from templates/mindmap.html. Never invent another format.
-- Maps are generated from the text by `python tools/workflow.py build`. Never edit a map by hand; text and map therefore always match.
-- Each draft and the backlog has its map beside it. Once anything is pushed, items not pushed yet are marked NEW, amendments AMENDED, retirements CUT, and new links are highlighted; a new link between two items that already existed has its own colour. Pushed items appear plain, for context. A written breakdown of the changes sits under the map. Before the first push everything is new, so nothing is marked.
+- "The mind map" is always a map generated from workflow/map-template.html. Never invent another format.
+- Maps are generated from the text by `python workflow/tool.py build`. Never edit a map by hand; text and map therefore always match.
+- plan/map.html shows everything pushed. The backlog and the draft each have a map beside them. Once anything is pushed, items not pushed yet are marked NEW, amendments AMENDED, retirements CUT, and new links are highlighted; a new link between two items that already existed has its own colour. Pushed items appear plain, for context, and a written breakdown of the changes sits under the map. Before the first push everything is new, so nothing is marked.
 - Each version keeps a map of every current item at that version, with that version's changes marked, including the items it retires (versions/vX/mindmap.html). The first version has nothing to compare with, so nothing is marked.
 - The design is settled: one column per layer, children placed next to their parent, hover to trace, click to pin, Esc to clear, light and dark. Change it only if the user asks.
 - An optional "Label:" field (2–4 words) sets an item's short name on the map; otherwise the title is shortened.
 - To view maps, serve the project folder (the `maps` config in .claude/launch.json, or `python -m http.server 8777`) and open a map in the browser.
 
-# Pushing a draft (a new version)
+# Pushing the draft (a new version)
 
 Only on the user's clear green light.
 
-1. `python tools/workflow.py check --push vX` and fix every error.
-2. Add the approved entries to the main documents with new IDs (`next-ids`), each under its home parent, turning title references into IDs. Apply the amendments (changed text, moves, new or removed links, retirements, Solved or Done marks). Entries that were not approved go back to the backlog.
-3. `python tools/workflow.py build`, which checks again at the end. Fix every error.
-4. `python tools/workflow.py record-push vX`. It saves versions/vX/ (the three documents and the version map), adds the entry to versions/log.md, and marks the draft "Pushed as vX on <date>", which freezes it.
+1. `python workflow/tool.py check --push vX` and fix every error.
+2. Add the approved entries to plan/ with new IDs (`next-ids`), each under its home parent, turning title references into IDs. Apply the amendments (changed text, moves, new or removed links, retirements, Solved or Done marks). Entries that were not approved go back to the backlog.
+3. `python workflow/tool.py build`, which checks again at the end. Fix every error.
+4. `python workflow/tool.py record-push vX`. It saves the plan and its map in versions/vX/, moves the draft there (frozen), and adds the log entry.
 5. Commit, tag the commit vX, and push the commit and the tag to origin.
 
 **Version numbers:** v0.1, v0.2, ... for new scope while prototyping; v0.1.1, v0.1.2, ... for fixes to what is already pushed; v1.0 when the user approves building the real product; v1.1, v1.2, ... after that. Numbers only go up and are never reused.
 
-**To reverse a push** (only when the user asks): restore the three main documents from the previous version in a new commit, move the reversed entries back to the backlog without IDs, take their features out of the prototype, and fill in the Rollback line of the reversed version's log entry. Its IDs are never reused.
+**To reverse a push** (only when the user asks): restore the three plan documents from the previous version in a new commit, move the reversed entries back to the backlog without IDs, take their features out of the prototype, and fill in the Rollback line of the reversed version's log entry. Its IDs are never reused.
+
+# Prototype first
+
+- Build a prototype first, one version after another. Don't start the real product until the user confirms the prototype covers the full scope.
+- After each push, build only the pushed features (an ID and a complete chain), in push order, in prototype/. When a feature is retired, take it out of the prototype.
+- Every built feature carries a small "!" marker: add `data-trace="F-001"` to its element and load prototype/trace/trace.css, chain.js, and trace.js. Hovering shows the feature's ID, name, and full chain up to every objective. chain.js is generated; never edit it.
+- When the user is happy with a version's prototype, save it: `python workflow/tool.py save-prototype vX` copies prototype/ into versions/vX/prototype/ (frozen), so every version's prototype can be opened and compared later. Commit it.
+- What the prototype must show and how it is judged is in plan/prototype.md. It changes only with the user's approval.
+
+# The real product (from v1.0)
+
+- v1.0 is the push where the user approves building the real product. From then on, pushed features are built in product/, and the prototype stays as it was.
+- Each piece of product code names the feature ID it builds (for example `F-012` in a comment), so everything stays traceable to its objective.
 
 # Safety
 
-- **Never edit or delete** a saved version, a pushed or retired draft, a git tag, or git history. Every fix is a new commit.
-- **The main documents change only through a push.**
+- **Never edit or delete** anything in versions/ or history/, a git tag, or git history. Every fix is a new commit.
+- **plan/ changes only through a push** (plan/prototype.md: only with the user's approval).
 - **Run `check` before and after every change.** Keep a change only if it adds no new errors.
 - **Keep each file's encoding (UTF-8) and line endings,** so diffs show only real changes.
 - **Commit before any big change,** so there is a restore point.
 - **Before moving or renaming a file, check what links to it.** Never move a file that a frozen file links to.
-- **Changing these rules:** show the user a table of every affected rule (kept, changed, removed, or fixed, and why) and wait for approval. Record the approved table in CHANGELOG.md. A change that restructures files is made on a separate branch and merged after approval.
-
-# Prototype first
-
-- Build a prototype first. Don't build the real product until the user confirms the prototype covers the full scope.
-- Build only pushed features (an ID and a complete chain), in push order. When a feature is retired, take it out of the prototype.
-- Every built feature carries a small "!" marker: add `data-trace="F-001"` to its element and load prototype/trace.css, prototype/chain.js, and prototype/trace.js. Hovering shows the feature's ID, name, and full chain up to every objective. chain.js is generated; never edit it.
-- What the prototype must show and how it is judged is in prototype.md.
+- **Changing these rules:** show the user a table of every affected rule (kept, changed, removed, or fixed, and why) and wait for approval. Record the approved table in workflow/CHANGELOG.md. A change that restructures files is made on a separate branch and merged after approval.
 
 # Analysis
 
-When the user shares project information, sort it into objectives, problems, solutions, sub-solutions, and features: in the backlog, or in the draft if it is for the next push. Never straight into the main documents.
+When the user shares project information, sort it into objectives, problems, solutions, sub-solutions, and features: in the backlog, or in the draft if it is for the next push. Never straight into plan/.

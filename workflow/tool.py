@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """Checks and generates everything derived in this workflow.
 
-Run from the project root (or anywhere; paths are relative to the folder above tools/):
+Run from the project root (or anywhere; paths are relative to the folder above workflow/):
 
-  python tools/workflow.py check [--push DRAFT]    report problems; changes nothing
-  python tools/workflow.py build [--dry-run]       regenerate back-links, draft overviews, copies, maps, prototype chain
-  python tools/workflow.py next-ids                next free ID of each kind
-  python tools/workflow.py new-draft VERSION
-                                                   create drafts/VERSION/ (only when no other draft is open)
-  python tools/workflow.py record-push VERSION [--draft DRAFT]
-                                                   save versions/VERSION/, add the log entry, freeze the draft
+  python workflow/tool.py check [--push DRAFT]     report problems; changes nothing
+  python workflow/tool.py build [--dry-run]        regenerate back-links, maps, draft overviews and copies,
+                                                   and the prototype's trace data
+  python workflow/tool.py next-ids                 next free ID of each kind
+  python workflow/tool.py new-draft VERSION        start the next draft (only when no draft is open)
+  python workflow/tool.py record-push VERSION [--note TEXT]
+                                                   save versions/VERSION/, add the log entry, and move the
+                                                   pushed draft into that folder
+  python workflow/tool.py save-prototype VERSION   save the live prototype into versions/VERSION/prototype/
+  python workflow/tool.py abandon-draft            give up the open draft: its entries go back to the backlog,
+                                                   and the draft is kept, frozen, in versions/abandoned/
 
-DRAFT is a path (drafts/v0.2/draft-v0.2.md) or a version (v0.2).
+DRAFT is a path (drafts/draft-v0.2.md) or a version (v0.2).
 Standard library only. Files keep their encoding and line endings. Frozen files are never written.
 """
 import argparse
@@ -23,15 +27,23 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+PLAN = ROOT / "plan"
 MAIN_DOCS = ["objectives.md", "problems.md", "solutions.md"]
+PLAN_MAP = PLAN / "map.html"
+PROTOTYPE_BRIEF = PLAN / "prototype.md"
 DRAFTS = ROOT / "drafts"
-BACKLOG = DRAFTS / "backlog" / "backlog.md"
+BACKLOG = DRAFTS / "backlog.md"
 VERSIONS = ROOT / "versions"
 LOG = VERSIONS / "log.md"
-TEMPLATE_MAP = ROOT / "templates" / "mindmap.html"
-TEMPLATE_DRAFT = ROOT / "templates" / "draft.md"
+ABANDONED = VERSIONS / "abandoned"
+HISTORY = ROOT / "history"
+WORKFLOW = ROOT / "workflow"
+TEMPLATE_MAP = WORKFLOW / "map-template.html"
+TEMPLATE_DRAFT = WORKFLOW / "draft-template.md"
 PROTOTYPE = ROOT / "prototype"
-CHAIN_JS = PROTOTYPE / "chain.js"
+TRACE = PROTOTYPE / "trace"
+CHAIN_JS = TRACE / "chain.js"
+TOOL = "workflow/tool.py"
 
 TYPE_NAME = {"objective": "Objective", "problem": "Problem", "solution": "Solution",
              "sub-solution": "Sub-solution", "feature": "Feature"}
@@ -52,11 +64,14 @@ GEN_BEGIN = re.compile(r"^\s*<!--\s*BEGIN GENERATED:\s*([\w-]+)\s*-->\s*$")
 GEN_END = re.compile(r"^\s*<!--\s*END GENERATED:\s*([\w-]+)\s*-->\s*$")
 RULE = re.compile(r"^\s*(-{3,}|\*{3,}|_{3,})\s*$")
 FIELD = re.compile(r"^-\s+([A-Za-z][A-Za-z -]*?)\s*(?:\([^)]*\))?\s*:\s?(.*)$")
+# Back-link lines written by hand in older versions of this workflow; "Served by" replaces them.
+LEGACY_BACKLINKS = {"problems", "also served by", "solutions", "also solved by"}
 FIELDS = {"type", "description", "idea", "serves", "home parent", "also serves", "amends",
-          "retire", "label", "design location", "open questions", "status", "served by"}
+          "retire", "label", "design location", "open questions", "status", "served by"} | LEGACY_BACKLINKS
 ALIAS = {"idea": "description", "home parent": "serves"}
-ID_HEAD = re.compile(r"^([OPSF])-(\d{3,})\b\s*[:.\u2014\u2013-]?\s*(.*)$")
-ID_RE = re.compile(r"\b([OPSF])-(\d{3,})\b")
+# IDs are flat (S-004). Older dotted IDs (S-002.1) are read as they are and never renamed.
+ID_HEAD = re.compile(r"^([OPSF])-(\d{3,}(?:\.\d+)*)\b\s*[:.\u2014\u2013-]?\s*(.*)$")
+ID_RE = re.compile(r"\b([OPSF])-(\d{3,}(?:\.\d+)*)\b")
 QUOTED = re.compile(r'"([^"\n]+)"|\u201c([^\u201d\n]+)\u201d')
 SEP = re.compile(r"\s+(?:\u2014|\u2013|--|-)\s+")
 FILLER = re.compile(r"\b(?:objectives?|problems?|solutions?|sub-?solutions?|features?|and|or|none|yet|n/a)\b", re.I)
@@ -105,6 +120,10 @@ class Writer:
         p = Path(path).resolve()
         return any(p == f or f in p.parents for f in self.frozen)
 
+    def note(self, path):
+        if rel(path) not in self.changed:
+            self.changed.append(rel(path))
+
     def write(self, path, text, allow_frozen=False):
         path = Path(path)
         if not allow_frozen and self.is_frozen(path):
@@ -118,12 +137,26 @@ class Writer:
         data = (text.replace("\n", nl) if nl != "\n" else text).encode("utf-8")
         if bom:
             data = b"\xef\xbb\xbf" + data
-        if rel(path) not in self.changed:
-            self.changed.append(rel(path))
+        self.note(path)
         if not self.dry:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
         return True
+
+    def copy(self, src, dst, allow_frozen=False):
+        if not allow_frozen and self.is_frozen(dst):
+            raise SystemExit(f"Refusing to write a frozen file: {rel(dst)}")
+        self.note(dst)
+        if not self.dry:
+            Path(dst).parent.mkdir(parents=True, exist_ok=True)
+            Path(dst).write_bytes(Path(src).read_bytes())
+
+    def remove(self, path):
+        if self.is_frozen(path):
+            raise SystemExit(f"Refusing to remove a frozen file: {rel(path)}")
+        self.note(path)
+        if not self.dry:
+            Path(path).unlink()
 
 
 # --------------------------------------------------------------------------- markdown
@@ -279,39 +312,36 @@ class Issues:
         self.add("warn", where, line, msg)
 
 
-# --------------------------------------------------------------------------- main documents
+# --------------------------------------------------------------------------- the plan (main documents)
 
 class Item:
-    def __init__(self, iid, title, doc, block, seq):
-        self.id, self.prefix, self.num = iid, iid[0], int(iid[2:])
-        self.title, self.doc, self.block, self.seq = title, doc, block, seq
+    def __init__(self, iid, title, doc, where, block, seq):
+        self.id, self.prefix = iid, iid[0]
+        self.num = int(iid[2:].split(".")[0])
+        self.title, self.doc, self.where, self.block, self.seq = title, doc, where, block, seq
         self.type = {"O": "objective", "P": "problem", "S": "solution", "F": "feature"}[self.prefix]
         self.serves, self.also, self.status = None, [], ""
         self.label = block.get("label")
         self.retired = False
 
-    @property
-    def name(self):
-        return f"{self.title} ({self.id})"
-
 
 class Main:
-    """The three main documents (or a saved version of them)."""
+    """The three main documents: the live plan/ or a saved version of them."""
 
-    def __init__(self, folder, issues=None, texts=None, label=None):
+    def __init__(self, folder, issues=None, texts=None):
         self.folder, self.items, self.files, self.lines = Path(folder), {}, {}, {}
         self.by_title = {}
         issues = issues if issues is not None else Issues()
-        where = label or ""
         seq = 0
         for doc in MAIN_DOCS:
             path = self.folder / doc
-            if texts and doc in texts:
+            where = rel(path)
+            if texts is not None and doc in texts:
                 tf = TextFile(path, texts[doc])
             elif path.exists():
                 tf = TextFile(path)
             else:
-                issues.error(where + doc, 0, "file is missing")
+                issues.error(where, 0, "file is missing")
                 continue
             self.files[doc] = tf
             lines = tf.text.split("\n")
@@ -320,16 +350,16 @@ class Main:
                 m = ID_HEAD.match(b.text)
                 if not m:
                     if b.level >= 2 and b.fields:
-                        issues.warn(where + doc, b.line(), f'heading "{b.text}" has fields but no ID')
+                        issues.warn(where, b.line(), f'heading "{b.text}" has fields but no ID')
                     continue
                 iid = f"{m.group(1)}-{m.group(2)}"
                 if PREFIX_DOC[m.group(1)] != doc:
-                    issues.error(where + doc, b.line(), f"{iid} belongs in {PREFIX_DOC[m.group(1)]}")
+                    issues.error(where, b.line(), f"{iid} belongs in {PREFIX_DOC[m.group(1)]}")
                 if iid in self.items:
-                    issues.error(where + doc, b.line(), f"{iid} is used twice")
+                    issues.error(where, b.line(), f"{iid} is used twice")
                     continue
                 seq += 1
-                it = Item(iid, m.group(3).strip(), doc, b, seq)
+                it = Item(iid, m.group(3).strip(), doc, where, b, seq)
                 self.items[iid] = it
                 self.by_title.setdefault(norm_title(it.title), it)
         for it in self.items.values():
@@ -350,13 +380,14 @@ class Main:
     def ordered(self, items=None):
         return sorted(items if items is not None else self.items.values(), key=lambda x: x.seq)
 
-    def entry_text(self, it, shift=0, drop_served_by=False):
+    def entry_text(self, it, shift=0, drop_backlinks=False):
         lines = self.lines[it.doc][it.block.start:it.block.end]
         while lines and (not lines[-1].strip() or RULE.match(lines[-1])):
             lines = lines[:-1]
         out = []
         for i, ln in enumerate(lines):
-            if drop_served_by and FIELD.match(ln) and field_name(FIELD.match(ln).group(1)) == "served by":
+            fm = FIELD.match(ln)
+            if drop_backlinks and fm and field_name(fm.group(1)) in LEGACY_BACKLINKS | {"served by"}:
                 continue
             if i == 0 and shift:
                 m = HEADING.match(ln)
@@ -376,11 +407,14 @@ class Main:
 
 def check_main(main, issues):
     for it in main.ordered():
-        where, b = it.doc, it.block
+        where, b = it.where, it.block
         if not it.title:
             issues.error(where, b.line(), f"{it.id} has no title")
         if not b.get("description").strip():
             issues.todo(where, b.line(), f"{it.id} has no description")
+        for name in sorted(LEGACY_BACKLINKS & set(b.fields)):
+            issues.warn(where, b.line(name), f'{it.id}: the old "{name.capitalize()}:" line can go; '
+                                             '"Served by" is generated now')
         if it.type == "objective":
             if it.status not in ("open", "done", "retired"):
                 issues.error(where, b.line("status"), f"{it.id}: Status must be Open, Done or Retired")
@@ -390,7 +424,7 @@ def check_main(main, issues):
             allowed = ALLOWED[it.type]
             refs, stray = parse_refs(b.get("serves"))
             if any(r[0] == "title" for r in refs) or stray:
-                issues.error(where, b.line("serves"), f"{it.id}: in the main documents, Serves must be an ID")
+                issues.error(where, b.line("serves"), f"{it.id}: in the plan, Serves must be an ID")
             if not it.serves:
                 issues.error(where, b.line("serves"), f"{it.id} has no home parent (Serves)")
             elif len([r for r in refs if r[0] == "id"]) > 1:
@@ -406,7 +440,7 @@ def check_main(main, issues):
                     issues.warn(where, b.line("serves"), f"{it.id} serves {p.id}, which is retired")
             arefs, astray = parse_refs(b.get("also serves"))
             if any(r[0] == "title" for r in arefs) or astray:
-                issues.error(where, b.line("also serves"), f"{it.id}: in the main documents, Also serves must list IDs")
+                issues.error(where, b.line("also serves"), f"{it.id}: in the plan, Also serves must list IDs")
             seen = set()
             for a in it.also:
                 p = main.items.get(a)
@@ -435,7 +469,7 @@ def check_main(main, issues):
         if it.type == "objective" and it.status == "done":
             for p in main.active():
                 if p.type == "problem" and (p.serves == it.id or it.id in p.also) and p.status != "solved":
-                    issues.warn(it.doc, it.block.line("status"), f"{it.id} is Done but {p.id} is not Solved")
+                    issues.warn(it.where, it.block.line("status"), f"{it.id} is Done but {p.id} is not Solved")
 
 
 def served_by_texts(main):
@@ -496,12 +530,16 @@ class Entry:
 
 
 class Draft:
+    """The backlog or the one open draft."""
+
     def __init__(self, path):
         self.path = Path(path)
         self.rel = rel(path)
         self.tf = TextFile(path)
         self.lines = self.tf.text.split("\n")
         self.is_backlog = self.path.resolve() == BACKLOG.resolve()
+        m = re.match(r"^draft-(v\d+(?:\.\d+)+)$", self.path.stem)
+        self.version = m.group(1) if m else None
         self.title = next((HEADING.match(l).group(2) for l in self.lines
                            if HEADING.match(l) and len(HEADING.match(l).group(1)) == 1), self.path.stem)
         self.status = ""
@@ -510,11 +548,7 @@ class Draft:
             if m:
                 self.status = m.group(1)
                 break
-        s = self.status.lower()
-        self.frozen = s.startswith("pushed") or s.startswith("retired")
-        self.active = s == "active"
-        m = re.match(r"pushed as (v[\d.]+)", s)
-        self.pushed_as = m.group(1).rstrip(".") if m else None
+        self.active = self.status.lower() == "active"
         self.map_path = self.path.with_name(self.path.stem + "-map.html")
         masked = mask(self.lines)
         blocks = parse_blocks(self.lines, masked)
@@ -532,10 +566,7 @@ def find_drafts():
     if BACKLOG.exists():
         out.append(Draft(BACKLOG))
     if DRAFTS.exists():
-        for folder in sorted(DRAFTS.iterdir(), key=lambda p: p.name):
-            if folder.is_dir() and folder.name not in ("backlog",):
-                for f in sorted(folder.glob("draft-*.md")):
-                    out.append(Draft(f))
+        out += [Draft(f) for f in sorted(DRAFTS.glob("draft-*.md"))]
     return out
 
 
@@ -602,8 +633,7 @@ def resolve_draft(draft, main, issues, backlog_titles, strict):
         def rtype(r):
             return r[1].type if r else None
 
-        serves_raw = b.get("serves")
-        refs, stray = parse_refs(serves_raw)
+        refs, stray = parse_refs(b.get("serves"))
         if stray:
             issues.warn(where, b.line("serves"), f'"{e.title}": put titles in double quotes and explanations after " \u2014 " '
                                                  f'(could not read "{stray}")')
@@ -720,8 +750,7 @@ class Graph:
 
         def name(k):
             n = self.nodes[k]
-            s = n["full"] + (f" ({n['ref']})" if n["ref"] else "")
-            return s
+            return n["full"] + (f" ({n['ref']})" if n["ref"] else "")
 
         def line(k):
             n = self.nodes[k]
@@ -768,8 +797,7 @@ class Graph:
 def draft_graph(draft, main):
     """Pushed context (all objectives and problems, plus the chains this draft touches) and the draft's own entries."""
     highlight = bool(main.items)
-    who = "backlog.md" if draft.is_backlog else draft.path.name
-    g = Graph(draft.title, f"Generated from {who} by tools/workflow.py \u2014 edit the text, not this map", highlight)
+    g = Graph(draft.title, f"Generated from {draft.path.name} by {TOOL} \u2014 edit the text, not this map", highlight)
     include = {it.id for it in main.active() if it.type in ("objective", "problem")}
     amended = {}
     for e in draft.entries:
@@ -829,7 +857,7 @@ def version_graph(version, main, prev):
             mark = "cut"
         elif prev is not None and not old:
             mark = "new"
-        elif old and main.entry_text(it, drop_served_by=True) != prev.entry_text(old, drop_served_by=True):
+        elif old and main.entry_text(it, drop_backlinks=True) != prev.entry_text(old, drop_backlinks=True):
             mark = "amended"
         g.node(it.id, it.type, it.title, short_label(it.title, it.label), it.id, mark, it.seq)
     old_links = prev.links() if prev else set()
@@ -840,6 +868,19 @@ def version_graph(version, main, prev):
             g.link(it.id, it.serves, True, (it.id, it.serves, 1) not in old_links)
         for a in it.also:
             g.link(it.id, a, False, (it.id, a, 0) not in old_links)
+    return g
+
+
+def plan_graph(main):
+    """The whole plan as it stands: everything pushed, nothing marked."""
+    g = Graph("Plan", f"Everything pushed so far \u00b7 generated by {TOOL}", False)
+    for it in main.ordered(main.active()):
+        g.node(it.id, it.type, it.title, short_label(it.title, it.label), it.id, "", it.seq)
+    for it in main.ordered(main.active()):
+        if it.serves:
+            g.link(it.id, it.serves, True)
+        for a in it.also:
+            g.link(it.id, a, False)
     return g
 
 
@@ -872,19 +913,19 @@ def js_data(data):
     return "\n".join(lines)
 
 
+def html_escape(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def render_map(graph):
     tpl = TextFile(TEMPLATE_MAP).text
     if not DATA_BLOCK.search(tpl):
         raise SystemExit(f"{rel(TEMPLATE_MAP)} has no /* BEGIN DATA */ ... /* END DATA */ block")
     data = graph.data()
-    head = "/* BEGIN DATA (generated by tools/workflow.py build; edit the text, not this map) */"
+    head = f"/* BEGIN DATA (generated by {TOOL} build; edit the text, not this map) */"
     out = DATA_BLOCK.sub(lambda m: head + "\n" + js_data(data) + "\n/* END DATA */", tpl, count=1)
     title = "<title>" + html_escape(data["version"]) + " \u00b7 map</title>"
     return re.sub(r"<title>.*?</title>", lambda m: title, out, count=1)
-
-
-def html_escape(s):
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def chain_js(main):
@@ -896,13 +937,13 @@ def chain_js(main):
             e["also"] = [a for a in it.also if a in main.items and not main.items[a].retired]
         chain[it.id] = e
     body = json.dumps(chain, ensure_ascii=False, indent=2).replace("</", "<\\/")
-    return ("/* Generated by tools/workflow.py build from objectives.md, problems.md and solutions.md.\n"
-            "   Do not edit: change the documents and rebuild. */\n"
+    return (f"/* Generated by {TOOL} build from plan/objectives.md, plan/problems.md and plan/solutions.md.\n"
+            "   Do not edit: change the plan and rebuild. */\n"
             f"window.TRACE_CHAIN = {body};\n")
 
 
 def draft_outputs(draft, main):
-    """The regenerated draft text and map, or None where the draft has no generated markers."""
+    """The regenerated draft text and map; `missing` lists generated blocks without markers."""
     g = draft_graph(draft, main)
     text = draft.tf.text
     missing = []
@@ -971,12 +1012,37 @@ def tag_exists(tag):
     return bool(r) and r.returncode == 0
 
 
-def changed_since(tag, path):
-    r = git("diff", "--quiet", tag, "--", rel(path))
+def git_changes(base, spec):
+    """(changed since base, untracked files, deleted files) for a list of pathspecs."""
+    r = git("diff", "--quiet", base, "--", *spec)
     changed = bool(r) and r.returncode == 1
-    u = git("status", "--porcelain", "--untracked-files=all", "--", rel(path))
-    untracked = bool(u) and any(l.startswith("??") for l in u.stdout.splitlines())
-    return changed or untracked
+    s = git("status", "--porcelain", "--untracked-files=all", "--", *spec)
+    lines = s.stdout.splitlines() if s else []
+    return changed, [l[3:] for l in lines if l.startswith("??")], [l[3:] for l in lines if "D" in l[:2]]
+
+
+def added_in(path):
+    """The last commit that added this file (a move counts as adding it at its new place)."""
+    r = git("log", "-1", "--diff-filter=A", "--format=%H", "--", rel(path))
+    return r.stdout.strip() if r and r.returncode == 0 and r.stdout.strip() else None
+
+
+def check_frozen_files(folder, issues, what):
+    """Every file under a frozen folder must be unchanged since it was added (or last moved)."""
+    waiting = False
+    for f in sorted(p for p in Path(folder).rglob("*") if p.is_file()):
+        base = added_in(f)
+        if not base:
+            waiting = True
+            continue
+        changed, _, _ = git_changes(base, [rel(f)])
+        if changed:
+            issues.error(rel(f), 0, f"{what} was changed after it was saved")
+    _, _, deleted = git_changes("HEAD", [rel(folder)])
+    for d in deleted:
+        issues.error(d, 0, f"{what} was deleted")
+    if waiting:
+        issues.warn(rel(folder), 0, "new files here are not committed yet; commit them")
 
 
 # --------------------------------------------------------------------------- context
@@ -984,29 +1050,47 @@ def changed_since(tag, path):
 class Context:
     def __init__(self, main_texts=None, strict=None):
         self.issues = Issues()
-        self.main = Main(ROOT, self.issues, texts=main_texts)
+        self.main = Main(PLAN, self.issues, texts=main_texts)
         self.drafts = find_drafts()
         self.strict = Path(strict).resolve() if strict else None
         self.backlog = next((d for d in self.drafts if d.is_backlog), None)
+        self.open = [d for d in self.drafts if not d.is_backlog]
         btitles = set(self.backlog.by_title) if self.backlog else set()
         for d in self.drafts:
-            if not d.frozen:
-                resolve_draft(d, self.main, self.issues, btitles,
-                              strict=bool(self.strict) and d.path.resolve() == self.strict)
+            resolve_draft(d, self.main, self.issues, btitles,
+                          strict=bool(self.strict) and d.path.resolve() == self.strict)
 
-    def frozen_paths(self):
-        paths = [p for p in version_folders()]
-        paths += [d.path.parent for d in self.drafts if d.frozen and not d.is_backlog]
-        return paths
+    @staticmethod
+    def frozen_paths():
+        folders = [p for p in VERSIONS.iterdir() if p.is_dir()] if VERSIONS.exists() else []
+        return folders + ([HISTORY] if HISTORY.exists() else [])
 
 
 def draft_arg(value):
     if value and VERSION_RE.match(value):
-        return DRAFTS / value / f"draft-{value}.md"
+        return DRAFTS / f"draft-{value}.md"
     return (Path.cwd() / value).resolve() if value else None
 
 
 # --------------------------------------------------------------------------- check
+
+def prototype_marker_issues(main, issues):
+    if not PROTOTYPE.exists():
+        return
+    for f in sorted(PROTOTYPE.rglob("*")):
+        if f.suffix.lower() not in (".html", ".htm", ".js") or TRACE in f.parents:
+            continue
+        for n, ln in enumerate(TextFile(f).text.split("\n"), 1):
+            found = [m.group(1) for m in TRACE_ATTR.finditer(ln)] + [m.group(1) for m in TRACE_JS.finditer(ln)]
+            for chunk in found:
+                for m in ID_RE.finditer(chunk):
+                    iid = f"{m.group(1)}-{m.group(2)}"
+                    it = main.items.get(iid)
+                    if not it:
+                        issues.error(rel(f), n, f"marker uses {iid}, which is not pushed")
+                    elif it.retired:
+                        issues.error(rel(f), n, f"marker uses {iid}, which is retired")
+
 
 def run_checks(ctx):
     issues, main = ctx.issues, ctx.main
@@ -1014,12 +1098,13 @@ def run_checks(ctx):
     fresh = served_by_texts(main)
     for doc, text in fresh.items():
         if text != main.files[doc].text:
-            issues.error(doc, 0, '"Served by" lines are out of date; run build')
+            issues.error(rel(PLAN / doc), 0, '"Served by" lines are out of date; run build')
+    if not PLAN_MAP.exists() or norm_text(TextFile(PLAN_MAP).text) != render_map(plan_graph(main)):
+        issues.error(rel(PLAN_MAP), 0, "out of date; run build")
     # drafts
-    open_drafts = [d for d in ctx.drafts if not d.frozen and not d.is_backlog]
-    if len(open_drafts) > 1:
-        issues.error("drafts", 0, "only one draft can be open at a time (the next push); move the others' entries "
-                                  "to the backlog and mark them Retired: " + ", ".join(d.rel for d in open_drafts))
+    if len(ctx.open) > 1:
+        issues.error("drafts", 0, "only one draft can be open at a time (the next push): "
+                                  + ", ".join(d.rel for d in ctx.open))
     titles = {}
     for d in ctx.drafts:
         s = d.status.lower()
@@ -1027,10 +1112,16 @@ def run_checks(ctx):
             issues.error(d.rel, 0, 'no "**Status:**" line')
         elif d.is_backlog and s != "backlog":
             issues.error(d.rel, 0, 'the backlog\'s status is "Backlog"')
-        elif not d.is_backlog and not (s == "active" or d.frozen):
-            issues.error(d.rel, 0, 'status must be Active, "Pushed as vX on <date>" or "Retired on <date>"')
-        if d.frozen:
-            continue
+        elif not d.is_backlog and s != "active":
+            issues.error(d.rel, 0, 'the open draft\'s status is "Active" (pushed drafts move to versions/vX/, '
+                                   'abandoned ones to versions/abandoned/)')
+        if not d.is_backlog:
+            if not d.version:
+                issues.error(d.rel, 0, "a draft is named draft-vX.md, after the version it will become")
+            elif (VERSIONS / d.version).exists():
+                issues.error(d.rel, 0, f"{d.version} is already pushed; this draft needs a new number")
+            elif (ABANDONED / f"draft-{d.version}.md").exists():
+                issues.error(d.rel, 0, f"{d.version} belonged to an abandoned draft; numbers are not reused")
         if not d.has_entries:
             issues.error(d.rel, 0, 'no "## Entries" section')
         for b in d.stray_levels:
@@ -1040,7 +1131,7 @@ def run_checks(ctx):
                 titles.setdefault(e.ntitle, []).append((d, e))
         text, html, missing = draft_outputs(d, main)
         for name in missing:
-            issues.error(d.rel, 0, f"missing <!-- BEGIN/END GENERATED: {name} --> markers (see templates/draft.md)")
+            issues.error(d.rel, 0, f"missing <!-- BEGIN/END GENERATED: {name} --> markers (see workflow/draft-template.md)")
         if text != d.tf.text:
             issues.error(d.rel, 0, "the generated overview or copied objectives and problems are out of date; run build")
         if not d.map_path.exists():
@@ -1055,7 +1146,7 @@ def run_checks(ctx):
         if len(files) > 1:
             (d0, _), (d1, e1) = files[0], files[1]
             issues.warn(d1.rel, e1.block.line(), f'"{e1.title}" is also in {d0.rel}; ideas are moved, not copied')
-    # versions, log and frozen files
+    # versions and the log
     folders = version_folders()
     rev = reversed_versions()
     logged = logged_versions()
@@ -1070,11 +1161,11 @@ def run_checks(ctx):
             issues.warn(rel(LOG), 0, f"the log has {v} but versions/{v}/ does not exist")
     latest = latest_version()
     if latest:
-        differs = [doc for doc in MAIN_DOCS if (latest / doc).exists() and (ROOT / doc).exists()
-                   and norm_text(TextFile(latest / doc).text) != norm_text(TextFile(ROOT / doc).text)]
+        differs = [doc for doc in MAIN_DOCS if (latest / doc).exists() and (PLAN / doc).exists()
+                   and norm_text(TextFile(latest / doc).text) != norm_text(TextFile(PLAN / doc).text)]
         if differs:
-            issues.warn("main documents", 0, f"{', '.join(differs)} differ from the latest version ({latest.name}); "
-                                             "that is only expected in the middle of a push")
+            issues.warn("plan", 0, f"{', '.join(differs)} differ from the latest version ({latest.name}); "
+                                   "that is only expected in the middle of a push")
     ever = {}
     for f in folders:
         if f.name in rev:
@@ -1083,37 +1174,31 @@ def run_checks(ctx):
             ever.setdefault(iid, f.name)
     for iid, v in sorted(ever.items()):
         if iid not in main.items:
-            issues.warn("main documents", 0, f"{iid} was in {v} but is gone now; retire items instead of deleting "
-                                             "them (only a rollback removes IDs)")
+            issues.warn("plan", 0, f"{iid} was in {v} but is gone now; retire items instead of deleting them "
+                                   "(only a rollback removes IDs)")
+    # frozen files
     if in_git():
         for f in folders:
+            spec = [rel(f), f":(exclude){rel(f / 'prototype')}"]
             if tag_exists(f.name):
-                if changed_since(f.name, f):
+                changed, untracked, _ = git_changes(f.name, spec)
+                if changed or untracked:
                     issues.error(rel(f), 0, f"a saved version was changed after tag {f.name}")
             elif f.name not in rev:
                 issues.warn(rel(f), 0, f"no git tag {f.name} yet; commit, tag {f.name} and push")
-        for d in ctx.drafts:
-            if d.frozen and d.pushed_as and tag_exists(d.pushed_as) and changed_since(d.pushed_as, d.path.parent):
-                issues.error(d.rel, 0, f"a pushed draft was changed after tag {d.pushed_as}")
+            if (f / "prototype").exists():
+                check_frozen_files(f / "prototype", issues, "a saved prototype")
+        if ABANDONED.exists():
+            check_frozen_files(ABANDONED, issues, "an abandoned draft")
+        if HISTORY.exists():
+            check_frozen_files(HISTORY, issues, "a history file")
     else:
         issues.warn("git", 0, "not a git repository; frozen-file checks were skipped")
     # prototype
     if PROTOTYPE.exists():
         if not CHAIN_JS.exists() or norm_text(TextFile(CHAIN_JS).text) != chain_js(main):
             issues.error(rel(CHAIN_JS), 0, "out of date; run build")
-        for f in sorted(PROTOTYPE.rglob("*")):
-            if f.suffix.lower() not in (".html", ".htm", ".js") or f.name in ("chain.js", "trace.js"):
-                continue
-            for n, ln in enumerate(TextFile(f).text.split("\n"), 1):
-                found = [m.group(1) for m in TRACE_ATTR.finditer(ln)] + [m.group(1) for m in TRACE_JS.finditer(ln)]
-                for chunk in found:
-                    for m in ID_RE.finditer(chunk):
-                        iid = f"{m.group(1)}-{m.group(2)}"
-                        it = main.items.get(iid)
-                        if not it:
-                            issues.error(rel(f), n, f"marker uses {iid}, which is not pushed")
-                        elif it.retired:
-                            issues.error(rel(f), n, f"marker uses {iid}, which is retired")
+    prototype_marker_issues(main, issues)
     return issues
 
 
@@ -1134,10 +1219,9 @@ def summary(ctx):
         counts[it.type] = counts.get(it.type, 0) + 1
     parts = [f"{counts.get(t, 0)} {TYPE_NAME[t].lower()}{'' if counts.get(t, 0) == 1 else 's'}" for t in TYPE_NAME]
     latest = latest_version()
-    active = [d.rel for d in ctx.drafts if d.active]
-    print("Main documents: " + ", ".join(parts))
+    print("Plan: " + ", ".join(parts))
     print(f"Latest version: {latest.name if latest else 'none yet'}  \u00b7  "
-          f"Active draft: {active[0] if active else 'none'}")
+          f"Open draft: {ctx.open[0].rel if ctx.open else 'none'}")
 
 
 def cmd_check(args):
@@ -1157,13 +1241,12 @@ def build(ctx, writer):
     fresh = served_by_texts(ctx.main)
     changed_main = False
     for doc, text in fresh.items():
-        if writer.write(ROOT / doc, text):
+        if writer.write(PLAN / doc, text):
             changed_main = True
     if changed_main:  # continue from the regenerated text (also correct in a dry run)
         ctx = Context(main_texts=fresh)
+    writer.write(PLAN_MAP, render_map(plan_graph(ctx.main)))
     for d in ctx.drafts:
-        if d.frozen:
-            continue
         text, html, missing = draft_outputs(d, ctx.main)
         for name in missing:
             print(f"  WARN  {d.rel} \u2014 no <!-- BEGIN/END GENERATED: {name} --> markers; that part was skipped")
@@ -1176,7 +1259,7 @@ def build(ctx, writer):
 
 def cmd_build(args):
     ctx = Context()
-    writer = Writer(dry=args.dry_run, frozen=ctx.frozen_paths())
+    writer = Writer(dry=args.dry_run, frozen=Context.frozen_paths())
     build(ctx, writer)
     verb = "Would update" if args.dry_run else "Updated"
     print(f"{verb}: " + (", ".join(writer.changed) if writer.changed else "nothing (already up to date)"))
@@ -1190,10 +1273,10 @@ def cmd_build(args):
     return 1 if n["error"] else 0
 
 
-# --------------------------------------------------------------------------- IDs, drafts, pushes
+# --------------------------------------------------------------------------- IDs, drafts, pushes, prototypes
 
 def all_ids():
-    ids = set(Main(ROOT, Issues()).items)
+    ids = set(Main(PLAN, Issues()).items)
     for f in version_folders():
         ids |= set(Main(f, Issues()).items)
     return ids
@@ -1202,7 +1285,7 @@ def all_ids():
 def next_ids():
     top = {"O": 0, "P": 0, "S": 0, "F": 0}
     for iid in all_ids():
-        top[iid[0]] = max(top[iid[0]], int(iid[2:]))
+        top[iid[0]] = max(top[iid[0]], int(iid[2:].split(".")[0]))
     return {k: f"{k}-{v + 1:03d}" for k, v in top.items()}
 
 
@@ -1216,30 +1299,29 @@ def cmd_next_ids(args):
     return 0
 
 
-def cmd_new_draft(args):
-    v = args.version
+def check_new_version(v):
     if not VERSION_RE.match(v):
-        raise SystemExit("Version looks like v0.2 or v0.1.1")
-    folder = DRAFTS / v
-    if folder.exists():
-        old = [Draft(f) for f in folder.glob("draft-*.md")]
-        if any(d.status.lower().startswith("retired") for d in old):
-            raise SystemExit(f"{v} belonged to a draft that was abandoned (Retired); numbers are not reused, pick the next one")
-        raise SystemExit(f"{rel(folder)} already exists")
+        raise SystemExit("A version looks like v0.2 or v0.1.1")
     if (VERSIONS / v).exists():
-        raise SystemExit(f"{v} was already pushed; pick a new number")
+        raise SystemExit(f"{v} was already pushed; versions are never overwritten")
+    if (ABANDONED / f"draft-{v}.md").exists():
+        raise SystemExit(f"{v} belonged to a draft that was abandoned; numbers are not reused, pick the next one")
     latest = latest_version(exclude_reversed=False)
     if latest and version_key(v) <= version_key(latest.name):
-        raise SystemExit(f"Version numbers only go up: the latest is {latest.name}")
+        raise SystemExit(f"Version numbers only go up and are never reused: the latest is {latest.name}")
+
+
+def cmd_new_draft(args):
+    v = args.version
+    check_new_version(v)
     ctx = Context()
-    open_drafts = [d.rel for d in ctx.drafts if not d.frozen and not d.is_backlog]
-    if open_drafts:
-        raise SystemExit(f"Only one draft can be open at a time: push {open_drafts[0]} first "
-                         "(or move its entries to the backlog and mark it Retired).")
+    if ctx.open:
+        raise SystemExit(f"Only one draft can be open at a time: push {ctx.open[0].rel} first "
+                         f"(or give it up with: python {TOOL} abandon-draft).")
     text = TextFile(TEMPLATE_DRAFT).text.replace("vX", v)
     text = re.sub(r"^\*\*Status:\*\*.*$", "**Status:** Active", text, count=1, flags=re.M)
-    writer = Writer(frozen=ctx.frozen_paths())
-    writer.write(folder / f"draft-{v}.md", text)
+    writer = Writer(frozen=Context.frozen_paths())
+    writer.write(DRAFTS / f"draft-{v}.md", text)
     build(Context(), writer)
     print("Created: " + ", ".join(writer.changed))
     return 0
@@ -1247,43 +1329,42 @@ def cmd_new_draft(args):
 
 def cmd_record_push(args):
     v = args.version
-    if not VERSION_RE.match(v):
-        raise SystemExit("Version looks like v0.2 or v0.1.1")
-    target = VERSIONS / v
-    if target.exists():
-        raise SystemExit(f"{rel(target)} already exists; versions are never overwritten")
-    latest_any = latest_version(exclude_reversed=False)
-    if latest_any and version_key(v) <= version_key(latest_any.name):
-        raise SystemExit(f"Version numbers only go up and are never reused: the latest is {latest_any.name}")
+    check_new_version(v)
     ctx = Context()
-    path = draft_arg(args.draft) if args.draft else next((d.path for d in ctx.drafts if d.active), None)
+    path = draft_arg(args.draft) if args.draft else (ctx.open[0].path if ctx.open else None)
     if not path:
-        raise SystemExit("No Active draft; name one with --draft")
-    draft = next((d for d in ctx.drafts if d.path.resolve() == Path(path).resolve()), None)
-    if not draft or draft.frozen or draft.is_backlog:
-        raise SystemExit(f"{args.draft or path} is not a draft that can be pushed")
+        raise SystemExit("There is no open draft to push")
+    draft = next((d for d in ctx.open if d.path.resolve() == Path(path).resolve()), None)
+    if not draft:
+        raise SystemExit(f"{args.draft or path} is not the open draft")
     ctx = Context(strict=draft.path)
     issues = run_checks(ctx)
     if any(i[0] == "error" for i in issues.items):
         print_issues(issues)
         raise SystemExit("\nNot recorded: fix the errors above first.")
+    target = VERSIONS / v
     prev_folder = latest_version()
     prev = Main(prev_folder, Issues()) if prev_folder else None
-    writer = Writer(frozen=ctx.frozen_paths())
-    # 1. freeze the draft as it was proposed: built against the version before this push
-    before = prev if prev is not None else Main(ROOT, Issues(), texts={d: "" for d in MAIN_DOCS})
+    writer = Writer(frozen=Context.frozen_paths())
+    today = datetime.date.today().isoformat()
+    # 1. the draft, as it was proposed (built against the version before this push), moves into its version
+    before = prev if prev is not None else Main(PLAN, Issues(), texts={d: "" for d in MAIN_DOCS})
     d = Draft(draft.path)
     resolve_draft(d, before, Issues(), set(), strict=False)
     text, html, _ = draft_outputs(d, before)
-    today = datetime.date.today().isoformat()
     text = re.sub(r"^\*\*Status:\*\*.*$", f"**Status:** Pushed as {v} on {today}", text, count=1, flags=re.M)
-    writer.write(d.path, text)
-    writer.write(d.map_path, html)
-    # 2. save the version
+    writer.write(target / d.path.name, text, allow_frozen=True)
+    writer.write(target / d.map_path.name, html, allow_frozen=True)
+    writer.remove(d.path)
+    if d.map_path.exists():
+        writer.remove(d.map_path)
+    # 2. the plan as pushed, and its map
     for doc in MAIN_DOCS:
         writer.write(target / doc, ctx.main.files[doc].text, allow_frozen=True)
+    if PROTOTYPE_BRIEF.exists():
+        writer.write(target / PROTOTYPE_BRIEF.name, TextFile(PROTOTYPE_BRIEF).text, allow_frozen=True)
     writer.write(target / "mindmap.html", render_map(version_graph(v, ctx.main, prev)), allow_frozen=True)
-    # 3. log entry
+    # 3. the log entry
     added, amended, retired = [], [], []
     for it in ctx.main.ordered():
         old = prev.items.get(it.id) if prev else None
@@ -1291,18 +1372,117 @@ def cmd_record_push(args):
             retired.append(it)
         elif not old:
             added.append(it)
-        elif ctx.main.entry_text(it, drop_served_by=True) != prev.entry_text(old, drop_served_by=True):
+        elif ctx.main.entry_text(it, drop_backlinks=True) != prev.entry_text(old, drop_backlinks=True):
             amended.append(it)
 
     def names(xs):
         return "; ".join(f"{x.id} {x.title}" for x in xs) or "none"
-    entry = [f"## {v} ({today})", f"- Draft: {rel(d.path)}", f"- Added: {names(added)}",
-             f"- Amended: {names(amended)}", f"- Retired: {names(retired)}", "- Rollback: none"]
+    entry = [f"## {v} ({today})", f"- Draft: {rel(target / d.path.name)}"]
+    if args.note:
+        entry.append(f"- Note: {' '.join(args.note.split())}")
+    entry += [f"- Added: {names(added)}", f"- Amended: {names(amended)}", f"- Retired: {names(retired)}",
+              "- Prototype: not saved yet", "- Rollback: none"]
     base = TextFile(LOG).text if LOG.exists() else "# Version log\n"
-    log_text = base.rstrip("\n") + "\n\n" + "\n".join(entry) + "\n"
-    writer.write(LOG, log_text)
+    writer.write(LOG, base.rstrip("\n") + "\n\n" + "\n".join(entry) + "\n")
     print("Recorded " + v + ": " + ", ".join(writer.changed))
-    print(f"\nNext: commit everything, tag the commit {v}, and push the commit and the tag.")
+    print(f"\nNext: commit everything, tag the commit {v}, and push the commit and the tag.\n"
+          f"Then build the prototype for {v} and save it with: python {TOOL} save-prototype {v}")
+    return 0
+
+
+def cmd_save_prototype(args):
+    v = args.version
+    latest = latest_version()
+    if not latest or latest.name != v:
+        raise SystemExit(f"Only the latest version's prototype can be saved (the latest is "
+                         f"{latest.name if latest else 'none'})")
+    target = VERSIONS / v / "prototype"
+    if target.exists():
+        raise SystemExit(f"{rel(target)} already exists; saved prototypes are never overwritten")
+    files = [p for p in PROTOTYPE.rglob("*") if p.is_file()] if PROTOTYPE.exists() else []
+    if not files:
+        raise SystemExit("prototype/ is empty; there is nothing to save")
+    issues = Issues()
+    prototype_marker_issues(Main(PLAN, Issues()), issues)
+    if issues.items:
+        print_issues(issues)
+        raise SystemExit("\nNot saved: fix the markers above first.")
+    writer = Writer(frozen=Context.frozen_paths())
+    for f in sorted(files):
+        writer.copy(f, target / f.relative_to(PROTOTYPE), allow_frozen=True)
+    # fill in the version's Prototype line in the log (with Rollback, the only lines that change in an entry)
+    today = datetime.date.today().isoformat()
+    line = f"- Prototype: saved on {today}"
+    lines = TextFile(LOG).text.split("\n")
+    hidden = mask(lines)
+    start = end = None
+    for i, ln in enumerate(lines):
+        m = None if hidden[i] else re.match(r"^##\s+(v[\d.]+)", ln)
+        if m and start is not None:
+            end = i
+            break
+        if m and m.group(1).rstrip(".") == v:
+            start = i
+    if start is None:
+        raise SystemExit(f"{rel(LOG)} has no entry for {v}")
+    body = range(start + 1, end if end is not None else len(lines))
+    proto = next((i for i in body if re.match(r"^-\s+Prototype:", lines[i])), None)
+    rollback = next((i for i in body if re.match(r"^-\s+Rollback:", lines[i])), None)
+    if proto is not None:
+        lines[proto] = line
+    elif rollback is not None:
+        lines.insert(rollback, line)
+    else:
+        lines.insert(max((i for i in body if lines[i].strip()), default=start) + 1, line)
+    writer.write(LOG, "\n".join(lines))
+    print(f"Saved the prototype for {v}: {rel(target)}/ ({len(files)} files). Commit it.")
+    return 0
+
+
+def cmd_abandon_draft(args):
+    ctx = Context()
+    path = draft_arg(args.draft) if args.draft else (ctx.open[0].path if ctx.open else None)
+    draft = next((d for d in ctx.open if path and d.path.resolve() == Path(path).resolve()), None)
+    if not draft:
+        raise SystemExit("There is no open draft to abandon")
+    if not ctx.backlog:
+        raise SystemExit(f"{rel(BACKLOG)} is missing")
+    target = ABANDONED / draft.path.name
+    if target.exists():
+        raise SystemExit(f"{rel(target)} already exists")
+    # 1. the entries go back to the backlog, word for word, at the end of its Entries section
+    moved = []
+    for e in draft.entries:
+        lines = draft.lines[e.block.start:e.block.end]
+        while lines and (not lines[-1].strip() or RULE.match(lines[-1])):
+            lines = lines[:-1]
+        moved += lines + [""]
+    blines = ctx.backlog.lines
+    hidden = mask(blines)
+    start = next((i for i, l in enumerate(blines) if not hidden[i] and re.match(r"^##\s+Entries", l)), None)
+    if start is None:
+        raise SystemExit(f'{rel(BACKLOG)} has no "## Entries" section')
+    end = next((i for i in range(start + 1, len(blines))
+                if not hidden[i] and re.match(r"^##\s", blines[i])), len(blines))
+    at = end
+    while at - 1 > start and (not blines[at - 1].strip() or RULE.match(blines[at - 1])):
+        at -= 1
+    tail = blines[at:end]
+    new_backlog = blines[:at] + [""] + moved + (["---", ""] if any(RULE.match(l) for l in tail) else []) + blines[end:]
+    writer = Writer(frozen=Context.frozen_paths())
+    writer.write(BACKLOG, "\n".join(new_backlog))
+    # 2. the draft is kept as a frozen record; its number is never reused
+    today = datetime.date.today().isoformat()
+    text = re.sub(r"^\*\*Status:\*\*.*$", f"**Status:** Retired on {today} (abandoned; its entries went back "
+                  "to the backlog)", draft.tf.text, count=1, flags=re.M)
+    writer.write(target, text, allow_frozen=True)
+    if draft.map_path.exists():
+        writer.copy(draft.map_path, ABANDONED / draft.map_path.name, allow_frozen=True)
+        writer.remove(draft.map_path)
+    writer.remove(draft.path)
+    build(Context(), writer)
+    print(f"Abandoned {draft.rel}: {len(draft.entries)} entries went back to the backlog; the draft is kept in "
+          f"{rel(target)}. Updated: " + ", ".join(writer.changed))
     return 0
 
 
@@ -1318,14 +1498,20 @@ def main(argv=None):
     b = sub.add_parser("build", help="regenerate everything derived from the text")
     b.add_argument("--dry-run", action="store_true", help="show what would change without writing")
     sub.add_parser("next-ids", help="next free ID of each kind")
-    n = sub.add_parser("new-draft", help="create drafts/VERSION/ (only when no other draft is open)")
+    n = sub.add_parser("new-draft", help="start the next draft (only when no draft is open)")
     n.add_argument("version")
-    r = sub.add_parser("record-push", help="save versions/VERSION/, add the log entry, freeze the draft")
+    r = sub.add_parser("record-push", help="save versions/VERSION/, add the log entry, move the draft there")
     r.add_argument("version")
     r.add_argument("--draft", metavar="DRAFT", help="the draft being pushed (default: the open draft)")
+    r.add_argument("--note", metavar="TEXT", help="one line for the log about what this version is")
+    s = sub.add_parser("save-prototype", help="save the live prototype into versions/VERSION/prototype/")
+    s.add_argument("version")
+    a = sub.add_parser("abandon-draft", help="give up the open draft; its entries go back to the backlog")
+    a.add_argument("--draft", metavar="DRAFT", help="the draft to abandon (default: the open draft)")
     args = p.parse_args(argv)
-    return {"check": cmd_check, "build": cmd_build, "next-ids": cmd_next_ids,
-            "new-draft": cmd_new_draft, "record-push": cmd_record_push}[args.cmd](args)
+    return {"check": cmd_check, "build": cmd_build, "next-ids": cmd_next_ids, "new-draft": cmd_new_draft,
+            "record-push": cmd_record_push, "save-prototype": cmd_save_prototype,
+            "abandon-draft": cmd_abandon_draft}[args.cmd](args)
 
 
 if __name__ == "__main__":
