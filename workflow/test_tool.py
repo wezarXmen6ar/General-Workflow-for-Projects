@@ -274,8 +274,21 @@ def cycle(root):
 - Design location: form page
 ''')
     run(root, "build")
+    saved = read(root, "drafts/draft-v0.2.md")
+    entries(root, "drafts/draft-v0.2.md", '''
+### Only a reason
+- Type: Amendment
+- Amends: S-002
+- Description: The wording of the part should change, but no New text is given.
+''')
+    run(root, "build")
+    code, out = run(root, "check", "--push", "v0.2")
+    ok("an amendment that changes nothing is caught before the push", code != 0 and "changes nothing in the plan" in out, out)
+    write(root, "drafts/draft-v0.2.md", saved)
+    run(root, "build")
     code, out = run(root, "apply-draft")
     ok("apply-draft with amendments", code == 0, out)
+    ok("apply-draft reports the amended items", "Amended: P-001; S-001; F-002; F-001" in out, out)
     pr, sol = read(root, "plan/problems.md"), read(root, "plan/solutions.md")
     ok("amendment: Status Solved", re.search(r"## P-001: Pain 1[\s\S]*?- Status: Solved", pr) is not None, pr)
     ok("amendment: link removed and new text",

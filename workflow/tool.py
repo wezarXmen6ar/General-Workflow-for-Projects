@@ -763,6 +763,11 @@ def resolve_draft(draft, main, issues, backlog_titles, strict):
                                  f'"{e.title}": {e.amends.id} does not also serve "{r[1].title}"; only also-serves links can be removed')
                 else:
                     e.remove.append(target)
+            changes = (e.home or arefs or e.remove or e.needs or e.retire or open_questions(b.get("open questions"))
+                       or any(b.get(f).strip() for f in ("new text", "done when", "design location", "label", "status")))
+            if not changes:
+                todo(where, b.line(), f'"{e.title}" changes nothing in the plan: put the new wording in "New text:" '
+                                      '(Description is only the reason), or name the fields that change')
             st = " ".join(b.get("status").split()).lower()
             if st:
                 ok = {"objective": ("open", "done"), "problem": ("open", "solved")}.get(ctype, ())
@@ -2030,9 +2035,11 @@ def cmd_apply_draft(args):
             set_field(texts, iid, "Also serves", ", ".join(also) or "none")
         if e.needs:
             set_field(texts, iid, "Needs", ", ".join(rid(r) for r in e.needs))
-        for name in ("Done when", "Design location", "Label", "Open questions"):
+        for name in ("Done when", "Design location", "Label"):
             if b.get(name.lower()).strip():
                 set_field(texts, iid, name, b.get(name.lower()))
+        if open_questions(b.get("open questions")):
+            set_field(texts, iid, "Open questions", b.get("open questions"))
         if e.status:
             set_field(texts, iid, "Status", e.status.capitalize())
         if e.retire:
@@ -2066,12 +2073,15 @@ def cmd_apply_draft(args):
         for e in sorted(skipped, key=lambda e: e.block.start, reverse=True):
             del lines[e.block.start:e.block.end]
         writer.write(draft.path, "\n".join(lines))
-    for doc in MAIN_DOCS:
-        writer.write(PLAN / doc, texts[doc])
     print("New IDs: " + ("; ".join(f"{newid[e.key]} {e.title}" for e in sorted(new, key=lambda e: (rank[e.type], e.index)))
                          or "none"))
-    print("Amended: " + ("; ".join(e.amends.id for e in amends) or "none"))
+    after = Main(PLAN, Issues(), texts=texts)
+    changed = [e.amends.id for e in amends
+               if main.entry_text(main.items[e.amends.id]) != after.entry_text(after.items[e.amends.id])]
+    print("Amended: " + ("; ".join(changed) or "none"))
     print("Sent back to the backlog: " + ("; ".join(e.title for e in skipped) or "none"))
+    for doc in MAIN_DOCS:
+        writer.write(PLAN / doc, texts[doc])
     if args.dry_run:
         print("\nDry run: nothing was written.")
         return 0

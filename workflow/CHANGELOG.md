@@ -2,6 +2,16 @@
 
 Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, removed, or fixed, and why.
 
+## Workflow 1.4.1 (2026-09-23)
+
+Fixes found by testing the upgrade on a real project.
+
+| Rule | Status | Now |
+|---|---|---|
+| An amendment changes the plan | Fixed | An amendment whose change sits only in its Description (the reason) used to change nothing without saying so. `check` now reports it, and `check --push` blocks it: the new wording goes in "New text:". |
+| Open questions in amendments | Fixed | "Open questions: none" is no longer copied into the plan. |
+| `apply-draft` report | Fixed | "Amended" lists only items whose text really changed. |
+
 ## Workflow 1.4 (2026-09-23)
 
 A full cycle: from the first idea to released versions of the real product and the project's close.
