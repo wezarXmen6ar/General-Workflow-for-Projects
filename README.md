@@ -31,7 +31,7 @@ Each `versions/vX/` folder holds everything about that version: the plan as push
 
 ## Start a new project
 
-1. Clone this repository, delete its `.git` folder, and run `git init`. (GitHub's "Use this template" button also works once the repository is marked as a template in its settings.)
+1. On GitHub, click "Use this template" to create your project's repository (or clone this one, delete its `.git` folder, and run `git init`).
 2. Open the folder in Claude Code. It reads `CLAUDE.md`, which holds all the rules.
 3. Talk about the project. Claude captures ideas in the backlog and sorts them into objectives, problems, solutions, and features.
 4. Pick a small first slice into the draft (`drafts/draft-v0.1.md`) and give the green light to push it.
