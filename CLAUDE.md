@@ -12,6 +12,8 @@ Keep all responses summarized, simple, straight to the point, clear, and easy to
 ```
 CLAUDE.md     how we work
 README.md     what this project is
+PRODUCT.md    optional: who the product is for and its tone (the impeccable skill reads it)
+DESIGN.md     optional: how it looks: colours, type, components (the impeccable skill reads it)
 plan/         WHAT and WHY: objectives.md, problems.md, solutions.md, prototype.md, constraints.md, map.html
 drafts/       NEXT: backlog.md and the one open draft (each with its map)
 versions/     HISTORY: log.md, one frozen folder per version, and abandoned/ for drafts given up
@@ -51,7 +53,7 @@ Objective (O-001) > Problem (P-001) > Solution (S-001) > Sub-solution (S-002, op
 # Drafts and backlog
 
 - Anything that could become an item goes into the backlog or the draft first, never straight into plan/.
-- **Capture fast.** A new idea goes into the backlog's Inbox as one line, unless the user says it is for the next push. Don't stop the conversation to ask about parents; note a likely one if it's obvious. A defect in something already built goes to the backlog's Bugs section instead (see Reviews and bugs).
+- **Capture fast.** A new idea goes into the backlog's Inbox as one line, unless the user says it is for the next push. No brainstorming at capture time. Don't stop the conversation to ask about parents; note a likely one if it's obvious. A defect in something already built goes to the backlog's Bugs section instead (see Reviews and bugs).
 - **The backlog** (drafts/backlog.md) holds every idea that is not in the open draft. It is never pushed as a whole. Each entry has a **Priority: Now, Next, or Later**. The user sets it; Claude suggests. The next draft is filled from Now, completing whole chains first.
 - **Only one draft is open at a time:** the next push (drafts/draft-vX.md, status Active). Everything else waits in the backlog. Start the next draft with `python workflow/tool.py new-draft vX` only when no draft is open. A pushed draft moves into its version folder, an abandoned one into versions/abandoned/; both stay there as frozen records. Ideas move between the backlog and the draft: moved, never copied.
 - **Before a push, every entry needs its full chain:** a type, a home parent, and any also-serves parents, each pointing to a pushed ID or to an entry in the same draft. Every feature also needs its "Done when". This is when to ask the user about parents.
@@ -91,6 +93,23 @@ Only on the user's clear green light.
 - **Review every built version with the user** before saving it: fill in prototype/REVIEW.md (from v1.0, product/REVIEW.md) with the date, who reviewed, the features accepted (they meet their "Done when"), the ones not accepted and why, and the findings. Every finding also goes into the backlog: ideas and changes to the Inbox, defects to Bugs. `save-prototype` and `record-release` refuse without a review, and each saved review is frozen with its version.
 - **Bugs:** one line each in the backlog's Bugs section, naming the feature: `- [ ] F-012: what is wrong (found YYYY-MM-DD)`. A fix changes no plan, so it needs no push. Tick the line when it is fixed; the next `save-prototype` or `record-release` moves it into that version's log entry.
 
+# Skills (optional)
+
+Installed skills make each step better. The workflow runs without them; when one is installed, use it at its step. **These rules decide where its output goes**, over the skill's own defaults: nothing goes to docs/superpowers/ or anywhere outside the folders above.
+
+| Step | Skill | Its output goes to |
+|---|---|---|
+| Moving ideas from the backlog into the draft | brainstorming (Superpowers) | Draft entries: chain, "Done when", open questions. The user's green light is its approval; no separate spec file. |
+| Before the first prototype, and when the look changes | impeccable `init` / `document` | PRODUCT.md and DESIGN.md at the root. Design context only: PRODUCT.md points to plan/objectives.md and never repeats it. Both change only with the user's approval; every version keeps a copy. |
+| After a push | writing-plans (Superpowers) | The version's build plan from `new-plan`. Every task names its feature ID; a need for a new or changed item goes to the backlog. |
+| Building | subagent-driven-development or executing-plans (Superpowers) | The prototype or product, task by task, with `check` and a commit after each. |
+| Building screens | impeccable (`craft`, `shape`, `layout`, `polish`, ...) | The feature's "Design location", following DESIGN.md and plan/constraints.md. |
+| Product code (from v1.0) | test-driven-development (Superpowers) | Tests named with the feature ID, written first from its "Done when". |
+| Before a review | impeccable `audit` / `critique`, verification-before-completion (Superpowers) | Findings to the backlog; every "Done when" shown to pass. |
+| Fixing a bug | systematic-debugging (Superpowers) | The fix; the bug line is ticked. |
+
+- A skill never skips a workflow step: no plan/ change without a push, no building a feature that is not pushed, no saved version edited.
+
 # Where things stand
 
 - `python workflow/tool.py status` lists what is covered, built, accepted, and still missing, the open questions and bugs, the backlog's priorities, and whether v1.0 is ready. Use it before deciding the next draft, for the v1.0 decision, and for quick updates to stakeholders.
@@ -98,7 +117,8 @@ Only on the user's clear green light.
 # Prototype first
 
 - Build a prototype first, one version after another. Don't start the real product until the user confirms the prototype covers the full scope.
-- After each push, build only the pushed features (an ID and a complete chain), in push order, in prototype/. When a feature is retired, take it out of the prototype.
+- After each push, start the version's build plan with `python workflow/tool.py new-plan` (prototype/plan-vX.md: one task per feature the version added or amended, in Needs order, each with its "Done when"), fill in its steps, and build from it. It is saved with the prototype.
+- Build only the pushed features (an ID and a complete chain), in push order, in prototype/. When a feature is retired, take it out of the prototype.
 - Every built feature carries a small "!" marker: add `data-trace="F-001"` to its element and load prototype/trace/trace.css, chain.js, and trace.js. Hovering shows the feature's ID, name, and full chain up to every objective. chain.js is generated; never edit it.
 - After the review, save it: `python workflow/tool.py save-prototype vX` copies prototype/ (with its review) into versions/vX/prototype/ (frozen), so every version's prototype can be opened and compared later. Commit it.
 - What the prototype must show and how it is judged is in plan/prototype.md. It changes only with the user's approval.
@@ -109,6 +129,7 @@ Only on the user's clear green light.
 - Before building, fill in product/design.md (stack, architecture, data, integrations, environments, tests) and read plan/constraints.md. design.md changes only with the user's approval.
 - Build pushed features in product/. Each piece of code and each test names the feature ID it builds (for example `F-012` in a comment). `check` reports IDs there that don't exist or are retired.
 - Every feature gets at least one test, named with its ID and based on its "Done when".
+- Each version's build plan is product/plans/vX.md (`new-plan`); `record-release` saves it in versions/vX/plan.md.
 - When a version's features are built, tested, and reviewed: `python workflow/tool.py record-release vX --approved-by NAME`, then tag the commit `vX-release` and push it.
 
 # Closing the project

@@ -56,6 +56,7 @@ python workflow/tool.py save-prototype v0.2  # save the reviewed prototype into 
 python workflow/tool.py record-release v1.0 --approved-by NAME   # from v1.0: release the reviewed product
 python workflow/tool.py abandon-draft        # give up the open draft; its entries go back to the backlog
 python workflow/tool.py next-ids             # next free ID of each kind
+python workflow/tool.py new-plan             # start the build plan for the latest version
 python workflow/test_tool.py                 # test the workflow itself (after changing workflow/)
 ```
 
@@ -68,6 +69,13 @@ The plan, the backlog, the draft, and every version have a mind map, generated f
 - **Which map:** today's plan is `plan/map.html`; the next change is the draft's map (`drafts/draft-vX-map.html`); a past version is `versions/vX/mindmap.html`.
 - **Whole plan in every draft map:** the draft and backlog maps show everything already pushed, plain, with the draft's own changes marked on top. "Show only changes" hides the rest; click again for the whole plan.
 - **Version chips and history:** each pushed item shows the version it was first pushed in (e.g. `v0.1`). Click it for its history: pushed, amended, built, accepted, released.
+
+## Recommended skills
+
+Optional. The workflow runs without them, and CLAUDE.md says where each one's output goes.
+
+- **[Superpowers](https://github.com/obra/superpowers)**: brainstorming (shaping a draft), writing-plans (the build plan), subagent-driven-development or executing-plans (building it), test-driven-development, systematic-debugging, verification-before-completion.
+- **[impeccable](https://github.com/pbakaus/impeccable)**: design. `init` writes PRODUCT.md and DESIGN.md; `craft`, `polish`, `audit`, and the rest improve the screens.
 
 ## Changes
 

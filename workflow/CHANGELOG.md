@@ -2,6 +2,18 @@
 
 Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, removed, or fixed, and why.
 
+## Workflow 1.6 (2026-09-24, branch skills-integration, not merged)
+
+Optional skills (Superpowers, impeccable) plugged into the steps they improve.
+
+| Rule | Status | Now |
+|---|---|---|
+| Skills | New | A "Skills (optional)" section maps each skill to its step and sends its output into the workflow's own folders, over the skill's defaults. |
+| Capture | Changed | Inbox capture stays one line; brainstorming happens when ideas move into the draft, and its result is the draft entries. |
+| Build plans | New | `new-plan` starts the latest version's build plan (prototype/plan-vX.md, from v1.0 product/plans/vX.md): one task per feature added or amended, in Needs order, with each "Done when". `check` catches plans naming unknown or retired IDs and warns about a feature missing from its version's plan; `status` shows progress. |
+| Saving versions | Changed | `save-prototype` keeps the build plan in the saved prototype and clears it from prototype/; `record-release` saves the product plan as versions/vX/plan.md (frozen). |
+| Design context | New | PRODUCT.md and DESIGN.md at the root (the impeccable skill's files), changed only with approval; `record-push` keeps a copy in each version. |
+
 ## Workflow 1.5 (2026-09-23)
 
 Maps that show where every item came from.

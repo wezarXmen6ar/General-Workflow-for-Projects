@@ -56,6 +56,10 @@ PRODUCT_REVIEW = PRODUCT / "REVIEW.md"
 PRODUCT_DESIGN = PRODUCT / "design.md"
 TEMPLATE_REVIEW = WORKFLOW / "review-template.md"
 TEMPLATE_DESIGN = WORKFLOW / "design-template.md"
+TEMPLATE_BUILD_PLAN = WORKFLOW / "build-plan-template.md"
+PRODUCT_PLANS = PRODUCT / "plans"
+DESIGN_CONTEXT = (ROOT / "PRODUCT.md", ROOT / "DESIGN.md")  # who it is for, and how it looks (the impeccable skill)
+CHECKBOX = re.compile(r"^\s*[-*]\s+\[([ xX])\]")
 SKIP_DIRS = {"node_modules", ".git", "dist", "build", "__pycache__", ".venv", "venv", ".next", "target"}
 TOOL = "workflow/tool.py"
 
@@ -1375,6 +1379,48 @@ def prototype_marker_issues(main, issues):
             issues.error(rel(f), n, f"marker uses {iid}, which is retired")
 
 
+def build_plan_path(v):
+    """The build plan of version v: prototype/plan-vX.md before v1.0, product/plans/vX.md from v1.0."""
+    return PRODUCT_PLANS / f"{v}.md" if version_key(v) >= (1, 0) else PROTOTYPE / f"plan-{v}.md"
+
+
+def live_build_plans():
+    out = sorted(PROTOTYPE.glob("plan-v*.md")) if PROTOTYPE.exists() else []
+    return out + (sorted(PRODUCT_PLANS.glob("v*.md")) if PRODUCT_PLANS.exists() else [])
+
+
+def plan_progress(path):
+    """(steps done, steps in all) of a build plan's checkboxes."""
+    marks = [m.group(1) for m in (CHECKBOX.match(ln) for ln in TextFile(path).text.split("\n")) if m]
+    return sum(x != " " for x in marks), len(marks)
+
+
+def version_features(v):
+    """The features a version added or amended, from its log entry."""
+    log = TextFile(LOG).text if LOG.exists() else ""
+    found = ids_in(log_value(log, v, "Added") or "") + ids_in(log_value(log, v, "Amended") or "")
+    return [iid for iid in dict.fromkeys(found) if iid.startswith("F-")]
+
+
+def build_plan_issues(main, issues):
+    for f in live_build_plans():
+        for n, ln in enumerate(TextFile(f).text.split("\n"), 1):
+            for iid in ids_in(ln):
+                it = main.items.get(iid)
+                if not it:
+                    issues.error(rel(f), n, f"the build plan names {iid}, which is not pushed")
+                elif it.retired:
+                    issues.error(rel(f), n, f"the build plan names {iid}, which is retired")
+    latest = latest_version()
+    if latest and build_plan_path(latest.name).exists():
+        named = set(ids_in(TextFile(build_plan_path(latest.name)).text))
+        for iid in version_features(latest.name):
+            it = main.items.get(iid)
+            if it and not it.retired and iid not in named:
+                issues.warn(rel(build_plan_path(latest.name)), 0, f"{iid} ({it.title}) came with {latest.name} "
+                                                                  "but has no task in its build plan")
+
+
 def product_id_issues(main, issues):
     for f, n, iid in product_ids():
         it = main.items.get(iid)
@@ -1492,7 +1538,8 @@ def run_checks(ctx):
     if in_git():
         for f in folders:
             # a saved prototype and a release review arrive after the tag; each is frozen from when it was added
-            spec = [rel(f), f":(exclude){rel(f / 'prototype')}", f":(exclude){rel(f / 'review.md')}"]
+            spec = [rel(f), f":(exclude){rel(f / 'prototype')}", f":(exclude){rel(f / 'review.md')}",
+                    f":(exclude){rel(f / 'plan.md')}"]
             if tag_exists(f.name):
                 changed, untracked, _ = git_changes(f.name, spec)
                 if changed or untracked:
@@ -1503,6 +1550,8 @@ def run_checks(ctx):
                 check_frozen_files(f / "prototype", issues, "a saved prototype")
             if (f / "review.md").exists():
                 check_frozen_files(f / "review.md", issues, "a saved release review")
+            if (f / "plan.md").exists():
+                check_frozen_files(f / "plan.md", issues, "a saved build plan")
         if ABANDONED.exists():
             check_frozen_files(ABANDONED, issues, "an abandoned draft")
         if HISTORY.exists():
@@ -1515,6 +1564,7 @@ def run_checks(ctx):
             issues.error(rel(CHAIN_JS), 0, "out of date; run build")
     prototype_marker_issues(main, issues)
     product_id_issues(main, issues)
+    build_plan_issues(main, issues)
     review_and_bug_issues(ctx, issues)
     return issues
 
@@ -1800,7 +1850,7 @@ def cmd_record_push(args):
     # 2. the plan as pushed, and its map
     for doc in MAIN_DOCS:
         writer.write(target / doc, ctx.main.files[doc].text, allow_frozen=True)
-    for extra in (PROTOTYPE_BRIEF, CONSTRAINTS):
+    for extra in (PROTOTYPE_BRIEF, CONSTRAINTS) + DESIGN_CONTEXT:
         if extra.exists():
             writer.write(target / extra.name, TextFile(extra).text, allow_frozen=True)
     built_now = built_features(ctx.main)
@@ -1875,6 +1925,8 @@ def cmd_save_prototype(args):
         writer.copy(f, target / f.relative_to(PROTOTYPE), allow_frozen=True)
     if TEMPLATE_REVIEW.exists():
         writer.write(PROTO_REVIEW, TextFile(TEMPLATE_REVIEW).text)
+    for old in sorted(PROTOTYPE.glob("plan-v*.md")):  # saved above; the next version starts a new plan
+        writer.remove(old)
     fixed = take_fixed_bugs(ctx, writer)
     # fill in the version's lines in the log (with Released and Rollback, the only lines that change in an entry)
     today = datetime.date.today().isoformat()
@@ -1919,6 +1971,57 @@ def cmd_abandon_draft(args):
     return 0
 
 
+def cmd_new_plan(args):
+    ctx = Context()
+    latest = latest_version()
+    if not latest:
+        raise SystemExit("Nothing is pushed yet; a build plan follows a push")
+    v = latest.name
+    path = build_plan_path(v)
+    if path.exists():
+        raise SystemExit(f"{rel(path)} already exists")
+    main, built = ctx.main, built_features(ctx.main)
+    todo = [main.items[i] for i in version_features(v) if i in main.items and not main.items[i].retired]
+    order, seen = [], set()
+
+    def visit(it):  # what a feature needs comes first
+        if it.id in seen:
+            return
+        seen.add(it.id)
+        for n in it.needs:
+            if n in main.items and main.items[n] in todo:
+                visit(main.items[n])
+        order.append(it)
+    for it in todo:
+        visit(it)
+    tasks = []
+    for k, it in enumerate(order, 1):
+        chain, x = [], it
+        while x and x.serves:
+            x = main.items.get(x.serves)
+            if x:
+                chain.append(x.id)
+        tasks += [f"### Task {k}: {it.title} ({it.id})", "",
+                  f"- Serves: {' > '.join([it.id] + chain)}",
+                  f"- Needs: {', '.join(it.needs) or 'none'}",
+                  f"- Design location: {it.block.get('design location').strip() or '(to decide)'}",
+                  f"- Done when: {' '.join(it.done_when.split()) or '(missing: add it with an Amendment)'}",
+                  f"- Already built: {'yes, this version changes it' if it.id in built else 'no'}", "",
+                  "- [ ] Step 1: (the writing-plans skill fills in the steps: files, code, checks)",
+                  f"- [ ] Check: {'every Done when above passes, shown in the browser' if version_key(v) < (1, 0) else 'its test, named with ' + it.id + ', passes'}",
+                  "- [ ] Commit", ""]
+    tpl = TextFile(TEMPLATE_BUILD_PLAN).text if TEMPLATE_BUILD_PLAN.exists() else "# Build plan for {version}\n\n{tasks}\n"
+    text = tpl.replace("{version}", v).replace("{where}", "the product (product/)" if version_key(v) >= (1, 0)
+                                                 else "the prototype (prototype/)")
+    text = text.replace("{tasks}", "\n".join(tasks).rstrip("\n") if tasks else
+                        "Nothing to build: this version added or amended no features.")
+    writer = Writer(frozen=Context.frozen_paths())
+    writer.write(path, finish(text))
+    print(f"Started {rel(path)} with {len(order)} tasks, in the order their Needs require. "
+          "Fill in the steps (the writing-plans skill), then build them task by task.")
+    return 0
+
+
 def cmd_status(args):
     ctx = Context()
     main = ctx.main
@@ -1953,6 +2056,14 @@ def cmd_status(args):
                 counts[e.priority.capitalize() if e.priority in PRIORITIES else "No priority"] = \
                     counts.get(e.priority.capitalize() if e.priority in PRIORITIES else "No priority", 0) + 1
         print("\nBacklog: " + (", ".join(f"{n} {k}" for k, n in sorted(counts.items())) or "empty"))
+    latest = latest_version()
+    if latest:
+        bp = build_plan_path(latest.name)
+        if bp.exists():
+            done, total = plan_progress(bp)
+            print(f"\nBuild plan for {latest.name}: {done} of {total} steps done ({rel(bp)})")
+        else:
+            print(f"\nBuild plan for {latest.name}: none yet (python {TOOL} new-plan)")
     if quiet:
         print("\nNothing to report for: " + "; ".join(quiet) + ".")
     problems = [q for q in active if q.type == "problem"]
@@ -2205,6 +2316,8 @@ def cmd_record_release(args):
         raise SystemExit("\nNot released: fix the code's feature IDs above first.")
     writer = Writer(frozen=Context.frozen_paths())
     writer.copy(PRODUCT_REVIEW, target, allow_frozen=True)
+    if build_plan_path(v).exists():
+        writer.copy(build_plan_path(v), VERSIONS / v / "plan.md", allow_frozen=True)
     if TEMPLATE_REVIEW.exists():
         writer.write(PRODUCT_REVIEW, TextFile(TEMPLATE_REVIEW).text)
     fixed = take_fixed_bugs(ctx, writer)
@@ -2244,6 +2357,7 @@ def main(argv=None):
     r.add_argument("--approved-by", metavar="NAME", required=True, help="who gave the green light")
     r.add_argument("--accept-gaps", metavar="WHY", help="for v1.0 only: go ahead although the prototype has gaps, and why")
     sub.add_parser("status", help="what is covered, built, accepted, open, and still missing")
+    sub.add_parser("new-plan", help="start the build plan for the latest version (one task per feature)")
     ap = sub.add_parser("apply-draft", help="write the open draft's entries into plan/ with new IDs")
     ap.add_argument("--skip", metavar="TITLE", action="append", help="an entry not approved: it goes back to the backlog")
     ap.add_argument("--dry-run", action="store_true", help="show the new IDs without writing")
@@ -2258,7 +2372,7 @@ def main(argv=None):
     return {"check": cmd_check, "build": cmd_build, "next-ids": cmd_next_ids, "new-draft": cmd_new_draft,
             "record-push": cmd_record_push, "save-prototype": cmd_save_prototype,
             "abandon-draft": cmd_abandon_draft, "status": cmd_status, "apply-draft": cmd_apply_draft,
-            "record-release": cmd_record_release}[args.cmd](args)
+            "record-release": cmd_record_release, "new-plan": cmd_new_plan}[args.cmd](args)
 
 
 if __name__ == "__main__":

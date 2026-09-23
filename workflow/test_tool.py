@@ -243,6 +243,22 @@ def cycle(root):
     ok("clean after v0.1", code == 0 and "0 errors, 0 to do, 0 warnings" in out, out)
     v01 = nodes(root, "versions/v0.1/mindmap.html")
     ok("version maps carry version chips", all(n.get("since") == "v0.1" for n in v01.values()), str(v01))
+    code, out = run(root, "new-plan")
+    bp = read(root, "prototype/plan-v0.1.md") if code == 0 else out
+    ok("new-plan starts the version's build plan", code == 0 and "# Build plan for v0.1" in bp, out)
+    ok("the build plan puts what a feature needs first",
+       0 <= bp.find("(F-001)") < bp.find("(F-002)") and "- Done when: Saved forms appear in the list." in bp, bp)
+    code, out = run(root, "new-plan")
+    ok("new-plan never overwrites a plan", code != 0 and "already exists" in out, out)
+    code, out = run(root, "status")
+    ok("status shows build plan progress", "Build plan for v0.1: 0 of 6 steps done" in out, out)
+    write(root, "prototype/plan-v0.1.md", bp + "\n### Task 3: Extra (F-999)\n")
+    code, out = run(root, "check")
+    ok("a build plan naming an unknown ID is caught", code != 0 and "the build plan names F-999" in out, out)
+    write(root, "prototype/plan-v0.1.md", bp.replace("F-002", "later"))
+    code, out = run(root, "check")
+    ok("a feature of the version missing from its plan is flagged", "F-002 (List) came with v0.1" in out, out)
+    write(root, "prototype/plan-v0.1.md", bp.replace("- [ ] Commit", "- [x] Commit"))
     saved_maps = {f: read(root, f) for f in ("versions/v0.1/mindmap.html", "versions/v0.1/draft-v0.1-map.html")}
 
     # ------------------------------------------------------------------ the prototype: built ticks, review, save
@@ -271,6 +287,8 @@ def cycle(root):
                                                "- [ ] F-001: button too small (found 2026-01-01)"))
     code, out = run(root, "save-prototype", "v0.1")
     ok("save-prototype after the review", code == 0, out)
+    ok("the build plan is saved with the prototype and leaves prototype/",
+       (root / "versions/v0.1/prototype/plan-v0.1.md").exists() and not (root / "prototype/plan-v0.1.md").exists())
     ok("the saved prototype keeps its review", "Test Reviewer" in read(root, "versions/v0.1/prototype/REVIEW.md"))
     ok("the live review starts again empty", "Test Reviewer" not in read(root, "prototype/REVIEW.md"))
     log = read(root, "versions/log.md")
@@ -355,7 +373,11 @@ def cycle(root):
     ok("the retired feature's marker is caught", code != 0 and "F-001, which is retired" in out, out)
     write(root, "prototype/index.html", '<ul data-trace="F-002"></ul>\n<form data-trace="F-003"></form>\n')
     run(root, "build")
+    write(root, "PRODUCT.md", "# Product\n\n## Register\n\nproduct\n")
+    write(root, "DESIGN.md", "# Design\n")
     code, out = run(root, "record-push", "v0.2", "--approved-by", "Head of Department")
+    ok("a version keeps PRODUCT.md and DESIGN.md", (root / "versions/v0.2/PRODUCT.md").exists()
+       and (root / "versions/v0.2/DESIGN.md").exists())
     ok("record-push v0.2", code == 0, out)
     log = read(root, "versions/log.md")
     ok("the log lists amended and retired items", "- Amended: P-001" in log and "F-002" in log
@@ -435,8 +457,11 @@ def cycle(root):
     code, out = run(root, "record-release", "v1.0", "--approved-by", "Decision Maker")
     ok("record-release refuses without a review", code != 0 and "Review first" in out, out)
     fill_review(root, "product/REVIEW.md", "v1.0", accepted="F-004")
+    code, out = run(root, "new-plan")
+    ok("from v1.0 the build plan goes in product/plans/", code == 0 and "(F-004)" in read(root, "product/plans/v1.0.md"), out)
     code, out = run(root, "record-release", "v1.0", "--approved-by", "Decision Maker")
     ok("record-release v1.0", code == 0, out)
+    ok("the release keeps its build plan", (root / "versions/v1.0/plan.md").exists())
     log = read(root, "versions/log.md")
     ok("the log records the release", re.search(r"- Released: \d{4}-\d\d-\d\d, approved by Decision Maker", log)
        is not None, log)
