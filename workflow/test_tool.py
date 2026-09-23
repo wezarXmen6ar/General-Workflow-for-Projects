@@ -69,12 +69,57 @@ def commit(root, msg, tag=None):
         git(root, "tag", tag)
 
 
+BACKLOG = """# Backlog
+
+**Status:** Backlog
+**Map:** [backlog-map.html](backlog-map.html)
+
+## Overview
+
+<!-- BEGIN GENERATED: tree -->
+<!-- END GENERATED: tree -->
+
+## Inbox
+
+Nothing yet.
+
+## Entries
+
+---
+
+## Bugs
+
+## Dropped
+
+Nothing yet.
+
+## Pushed objectives and problems
+
+<!-- BEGIN GENERATED: copied -->
+<!-- END GENERATED: copied -->
+"""
+
+
+def blank_project(root):
+    """A new, empty project that uses this workflow: its own workflow/ files and nothing of the real project's."""
+    shutil.copytree(SRC / "workflow", root / "workflow", ignore=shutil.ignore_patterns("__pycache__"))
+    if (SRC / "prototype" / "trace").exists():
+        shutil.copytree(SRC / "prototype" / "trace", root / "prototype" / "trace")
+    for doc, title in (("objectives", "Objectives"), ("problems", "Problems"), ("solutions", "Solutions")):
+        write(root, f"plan/{doc}.md", f"# {title}\n\n---\n")
+    write(root, "plan/prototype.md", "# Prototype\n")
+    write(root, "plan/constraints.md", "# Constraints\n")
+    write(root, "drafts/backlog.md", BACKLOG)
+    write(root, "versions/log.md", "# Version log\n\n---\n")
+    write(root, "product/README.md", "# Product\n")
+    write(root, "prototype/REVIEW.md", read(root, "workflow/review-template.md"))
+    run(root, "new-draft", "v0.1")
+
+
 def main():
     tmp = Path(tempfile.mkdtemp())
     root = tmp / "proj"
-    shutil.copytree(SRC, root, ignore=shutil.ignore_patterns(".git", "__pycache__"))
-    for leftover in ("history",):
-        shutil.rmtree(root / leftover, ignore_errors=True)
+    blank_project(root)
     git(root, "init", "-q", "-b", "main")
     commit(root, "start")
     try:

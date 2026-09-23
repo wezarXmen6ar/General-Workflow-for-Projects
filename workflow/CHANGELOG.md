@@ -2,6 +2,12 @@
 
 Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, removed, or fixed, and why.
 
+## Workflow 1.4.2 (2026-09-23)
+
+| Rule | Status | Now |
+|---|---|---|
+| Tests for the workflow | Fixed | workflow/test_tool.py builds its own blank project from the workflow's files, so it runs inside any project, not only an empty one. |
+
 ## Workflow 1.4.1 (2026-09-23)
 
 Fixes found by testing the upgrade on a real project.
