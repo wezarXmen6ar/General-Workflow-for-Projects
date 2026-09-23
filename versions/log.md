@@ -2,7 +2,7 @@
 
 One entry per push, oldest first, written by `python workflow/tool.py record-push`. Each `versions/vX/` folder holds that version: the plan as pushed, its map, the draft that proposed it, and the prototype built for it.
 
-Never edit or delete an entry. The only lines that change afterwards: `save-prototype` fills in the Prototype line, `record-release` the Released line, both add fixed bugs to the Fixed line, and a reversed version gets its Rollback line filled in.
+Never edit or delete an entry. The only lines that change afterwards: `save-prototype` fills in the Prototype line, `record-release` the Released and Built lines, both add fixed bugs to the Fixed line, and a reversed version gets its Rollback line filled in.
 
 **Entry format**
 
@@ -17,6 +17,7 @@ Never edit or delete an entry. The only lines that change afterwards: `save-prot
 - Retired: IDs and titles
 - Prototype: not saved yet | saved on YYYY-MM-DD     (before v1.0)
 - Released: not yet | YYYY-MM-DD, approved by NAME  (from v1.0)
+- Built: (from v1.0, written on release) the features the product builds in this release
 - Fixed: (bugs fixed in this version, if any)
 - Rollback: none | reversed on YYYY-MM-DD, restored from v0.x
 ```

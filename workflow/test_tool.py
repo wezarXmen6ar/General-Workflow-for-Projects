@@ -52,6 +52,10 @@ def mapdata(root, f):
     return json.loads(m.group(1))
 
 
+def nodes(root, f):
+    return {n.get("ref") or n["id"]: n for n in mapdata(root, f)["nodes"]}
+
+
 def fill_review(root, f, version, accepted="", not_accepted=""):
     t = read(root, f)
     t = re.sub(r"^- Version:.*$", f"- Version: {version}", t, flags=re.M)
@@ -237,6 +241,9 @@ def cycle(root):
     commit(root, "v0.1", "v0.1")
     code, out = run(root, "check")
     ok("clean after v0.1", code == 0 and "0 errors, 0 to do, 0 warnings" in out, out)
+    v01 = nodes(root, "versions/v0.1/mindmap.html")
+    ok("version maps carry version chips", all(n.get("since") == "v0.1" for n in v01.values()), str(v01))
+    saved_maps = {f: read(root, f) for f in ("versions/v0.1/mindmap.html", "versions/v0.1/draft-v0.1-map.html")}
 
     # ------------------------------------------------------------------ the prototype: built ticks, review, save
     write(root, "prototype/index.html", '<button data-trace="F-001">Save</button>\n')
@@ -359,6 +366,24 @@ def cycle(root):
     commit(root, "v0.2", "v0.2")
     code, out = run(root, "check")
     ok("clean after v0.2", code == 0, out)
+    dm = nodes(root, "versions/v0.2/draft-v0.2-map.html")
+    ok("a draft map shows every pushed item", set(v01) <= set(dm), str(sorted(set(v01) - set(dm))))
+    ok("a draft map marks its own entries and hides nothing else",
+       dm["F-002"].get("mark") == "amended" and not dm["O-001"].get("mark")
+       and any(n.get("hist") == "Not pushed yet: new in this draft" for n in dm.values()), str(dm))
+    ok("a draft map has the Show only changes switch", "Show only changes" in read(root, "versions/v0.2/draft-v0.2-map.html"))
+    pm = nodes(root, "plan/map.html")
+    ok("the plan map marks nothing", not any(n.get("mark") for n in pm.values()), str(pm))
+    ok("chips show the version each item was first pushed",
+       pm["F-002"].get("since") == "v0.1" and pm["F-003"].get("since") == "v0.2", str(pm))
+    ok("history lists pushed, amended and built",
+       pm["F-002"].get("hist", "").startswith("Pushed in v0.1 · Amended in v0.2")
+       and "Built in the v0.1 prototype" in pm["F-002"]["hist"], pm["F-002"].get("hist"))
+    ok("history lists the review that accepted it", "Accepted in the v0.2 review" in pm["F-003"].get("hist", ""),
+       pm["F-003"].get("hist"))
+    v02 = nodes(root, "versions/v0.2/mindmap.html")
+    ok("a version map shows history as of that version",
+       v02["F-002"].get("since") == "v0.1" and "Amended in v0.2" in v02["F-002"].get("hist", ""), str(v02["F-002"]))
 
     # ------------------------------------------------------------------ abandoning a draft still works
     run(root, "new-draft", "v0.3")
@@ -416,6 +441,9 @@ def cycle(root):
     ok("the log records the release", re.search(r"- Released: \d{4}-\d\d-\d\d, approved by Decision Maker", log)
        is not None, log)
     ok("the release review is saved with the version", "Test Reviewer" in read(root, "versions/v1.0/review.md"))
+    ok("the log lists what the release built", re.search(r"^- Built: F-004$", log, re.M) is not None, log)
+    ok("history shows the release", "Released in v1.0" in nodes(root, "plan/map.html")["F-004"].get("hist", ""))
+    ok("saved maps never change", all(read(root, f) == s for f, s in saved_maps.items()))
     commit(root, "release v1.0", "v1.0-release")
     code, out = run(root, "check")
     ok("clean after the release (a review added after the tag is fine)", code == 0, out)

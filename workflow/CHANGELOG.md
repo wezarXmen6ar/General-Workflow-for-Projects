@@ -2,6 +2,21 @@
 
 Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, removed, or fixed, and why.
 
+## Workflow 1.5 (2026-09-23)
+
+Maps that show where every item came from.
+
+| Rule | Status | Now |
+|---|---|---|
+| Draft and backlog maps | Changed | They show the whole pushed plan, plain, for context, with the draft's own entries marked (NEW, AMENDED, CUT, new links) on top. The draft's written overview still lists only what it touches. |
+| Version chips | New | Every pushed item on a map shows the version it was first pushed in. |
+| Item history | New | The map's detail strip shows each item's history: pushed in, amended in, built in (a saved prototype), accepted in (a saved review), released in. |
+| Show only changes | New | Maps with marks get a button that hides plain items not on a changed item's chain; click again for the whole plan. |
+| Version maps | Changed | versions/vX/mindmap.html also shows the chips, history, and ✓ built as of that version. Maps already saved are never regenerated. |
+| Releases | Changed | `record-release` adds a "Built:" line to the log listing the product features in that release. |
+| Which map to open | New | Today: plan/map.html. Next change: the draft's map. A past version: versions/vX/mindmap.html. |
+| Commands that record a version | Changed | `record-push`, `save-prototype`, and `record-release` rebuild the live maps afterwards, since chips and history change with them. |
+
 ## Workflow 1.4.2 (2026-09-23)
 
 | Rule | Status | Now |

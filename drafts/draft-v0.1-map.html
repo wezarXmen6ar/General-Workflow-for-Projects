@@ -105,6 +105,12 @@ h1{margin:0;font-size:1.25rem;font-weight:500;letter-spacing:-0.01em}
 .sum ul{margin:0;padding-left:18px}
 .sum li{margin:3px 0}
 .sum .no{color:var(--ink2)}
+.ver{display:inline-block;margin-left:6px;font:500 10px/1 "IBM Plex Mono",ui-monospace,monospace;padding:2px 4px;border-radius:4px;border:1px solid currentColor;opacity:.55;vertical-align:1px}
+.dt .hist{display:block;font-size:0.8125rem;color:var(--ink);margin-top:4px}
+.tog{font:inherit;font-size:0.8125rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);background:var(--s1);color:var(--ink);cursor:pointer}
+.tog[aria-pressed="true"]{background:var(--focus);color:var(--bg);border-color:var(--focus)}
+.tog:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.nd.gone{display:none !important}
 noscript{display:block;margin:20px 0;color:var(--ink2)}
 @media (max-width:860px){.gr{grid-template-columns:1fr !important;gap:20px}.lk{display:none}.area{height:auto !important}.nd{position:relative;top:auto !important;margin-bottom:12px}}
 @media (prefers-reduced-motion:reduce){.e,.nd{transition:none}}
@@ -214,6 +220,7 @@ b.title=(n.ref?n.ref+" — ":"")+n.full+(n.built?" (built)":"");
 var lb=document.createElement("span");lb.className="lb";lb.textContent=n.short||n.full;b.appendChild(lb);
 if(m){var tg=document.createElement("span");tg.className="tg "+MC[m];tg.textContent=MK[m]+" · "+label(l.key);b.appendChild(tg)}
 if(n.built){var ok=document.createElement("span");ok.className="ok";ok.textContent="\u2713";ok.setAttribute("aria-label","built");lb.appendChild(ok)}
+if(n.since){var vr=document.createElement("span");vr.className="ver";vr.textContent=n.since;vr.title="First pushed in "+n.since;lb.appendChild(vr)}
 if(p>1){var s=document.createElement("span");s.className="bg";s.textContent=p;b.appendChild(s)}
 ar.appendChild(b);nd[n.id]=b;ids.push(n.id)});
 cols.push({area:ar,ids:ids});
@@ -234,7 +241,7 @@ while(bl.length>1){var b=bl[bl.length-1],a=bl[bl.length-2];if(a.sum/a.n>b.sum/b.
 bl.forEach(function(b){var t=b.sum/b.n;for(var i=b.s;i<=b.e;i++){var k=ids[i];Y[k]=t+offs[i]+Hh[k]/2}})}
 for(var it=0;it<8;it++){
 for(var c=1;c<cols.length;c++)place(cols[c].ids,function(k){var p=home[k];return p!=null&&Y[p]!=null?Y[p]:Y[k]});
-for(var c2=cols.length-2;c2>=0;c2--)place(cols[c2].ids,function(k){var ch=kids[k];if(!ch||!ch.length)return Y[k];var s=0;ch.forEach(function(x){s+=Y[x]});return s/ch.length})}
+for(var c2=cols.length-2;c2>=0;c2--)place(cols[c2].ids,function(k){var ch=(kids[k]||[]).filter(function(x){return Y[x]!=null});if(!ch.length)return Y[k];var s=0;ch.forEach(function(x){s+=Y[x]});return s/ch.length})}
 var top=Infinity,bot=0;
 Object.keys(Y).forEach(function(k){top=Math.min(top,Y[k]-Hh[k]/2)});
 if(top===Infinity)top=0;
@@ -275,6 +282,7 @@ function note(c,p){var e=LK[c+"|"+p],k=kind(e);return k?" <i>(new "+(e[2]?"home"
 function info(id){var n=T[id],m=mark(id),ps=(up[id]||[]).slice(),cs=dn[id]||[];
 ps.sort(function(a,b){return LK[id+"|"+b][2]-LK[id+"|"+a][2]});
 var h='<span class="ttl"><b>'+esc(label(n.layer))+(n.ref?" "+esc(n.ref):"")+"</b> — "+esc(n.full)+(n.built?'<span class="ok">\u2713 built</span>':"")+(m?'<span class="tg in '+MC[m]+'">'+MK[m]+"</span>":"")+"</span>";
+if(n.hist)h+='<span class="hist">'+esc(n.hist)+"</span>";
 if(ps.length)h+='<span class="sv">Serves '+ps.length+": "+ps.map(function(x){return nm(x)+note(id,x)}).join("  ·  ")+"</span>";
 if(cs.length)h+='<span class="sv">Served by '+cs.length+": "+cs.map(function(x){return nm(x)+note(x,id)}).join("  ·  ")+"</span>";
 return h}
@@ -326,6 +334,24 @@ document.addEventListener("keydown",function(e){
 if(e.key==="Escape"&&pin){nd[pin].classList.remove("pin");pin=null;focus(null)}});
 
 function redraw(){layout();draw();if(pin)focus(pin)}
+
+if(marked){
+var ALL=LINKS.slice(),only=false,tog=document.createElement("button");
+tog.type="button";tog.className="tog";tog.setAttribute("aria-pressed","false");tog.textContent="Show only changes";
+var lg=document.getElementById("lgd");lg.appendChild(document.createElement("span")).className="sp";lg.appendChild(tog);
+function changed(){var set={},st=[];
+DATA.nodes.forEach(function(n){if(mark(n.id))st.push(n.id)});
+ALL.forEach(function(e){if(kind(e)){st.push(e[0]);st.push(e[1])}});
+while(st.length){var k=st.pop();if(set[k])continue;set[k]=1;(up[k]||[]).forEach(function(p){st.push(p)})}
+return set}
+tog.addEventListener("click",function(){
+only=!only;tog.setAttribute("aria-pressed",only?"true":"false");tog.textContent=only?"Show the whole plan":"Show only changes";
+var keep=only?changed():null;
+if(pin&&keep&&!keep[pin]){nd[pin].classList.remove("pin");pin=null;focus(null)}
+Object.keys(nd).forEach(function(k){nd[k].classList.toggle("gone",!!keep&&!keep[k])});
+cols.forEach(function(c){c.all=c.all||c.ids.slice();c.ids=c.all.filter(function(k){return !keep||keep[k]})});
+LINKS=ALL.filter(function(e){return !keep||(keep[e[0]]&&keep[e[1]])});
+redraw()})}
 dt.innerHTML=DEF;redraw();
 var lastW=gr.offsetWidth;
 function onResize(){var w=gr.offsetWidth;if(w!==lastW){lastW=w;redraw()}}

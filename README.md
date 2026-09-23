@@ -65,6 +65,10 @@ python workflow/test_tool.py                 # test the workflow itself (after c
 
 The plan, the backlog, the draft, and every version have a mind map, generated from the text. Serve the folder (`python -m http.server 8777`, or the `maps` config in `.claude/launch.json`) and open a map in the browser. Hover to trace an item's chain, click to pin, Esc to clear. Features already built show a ✓. Once anything is pushed, items not pushed yet show as NEW, changes as AMENDED, retirements as CUT, and new links are highlighted.
 
+- **Which map:** today's plan is `plan/map.html`; the next change is the draft's map (`drafts/draft-vX-map.html`); a past version is `versions/vX/mindmap.html`.
+- **Whole plan in every draft map:** the draft and backlog maps show everything already pushed, plain, with the draft's own changes marked on top. "Show only changes" hides the rest; click again for the whole plan.
+- **Version chips and history:** each pushed item shows the version it was first pushed in (e.g. `v0.1`). Click it for its history: pushed, amended, built, accepted, released.
+
 ## Changes
 
 See [workflow/CHANGELOG.md](workflow/CHANGELOG.md).
