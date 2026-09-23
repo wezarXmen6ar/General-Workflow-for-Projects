@@ -4,7 +4,9 @@ Solutions, their sub-solutions, and the features that implement them. Only pushe
 
 - Each entry sits under its home parent: sub-solutions under their solution, features under their solution or sub-solution.
 - IDs are flat and permanent. Solutions and sub-solutions share the S- numbers.
-- Optional fields for any entry: "Label:" (2–4 words for the map) and "Status: Retired".
+- Optional fields for any entry: "Label:" (2–4 words for the map), "Open questions:", and "Status: Retired".
+- Every feature has a "Done when:" line. "Needs:" lists features that must be built first.
+- `python workflow/tool.py apply-draft` writes new entries here at a push, each under its home parent.
 
 **Entry format**
 
@@ -25,6 +27,8 @@ Solutions, their sub-solutions, and the features that implement them. Only pushe
 - Description:
 - Serves: S-002
 - Also serves: none
+- Needs: (optional)
+- Done when:
 - Design location:
 ```
 

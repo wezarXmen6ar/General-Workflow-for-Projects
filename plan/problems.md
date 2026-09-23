@@ -10,6 +10,7 @@ What stands in the way of the objectives. Only pushed entries live here, and thi
 - Serves: O-001
 - Also serves: none
 - Label: (optional, 2–4 words for the map)
+- Open questions: (optional)
 - Status: Open | Solved | Retired
 - Served by: (generated)
 ```

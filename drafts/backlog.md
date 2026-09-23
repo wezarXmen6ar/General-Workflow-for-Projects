@@ -21,9 +21,13 @@ Nothing yet.
 
 ## Entries
 
-Same entry format as a draft (see workflow/draft-template.md). Entries here may still be missing parents.
+Same entry format as a draft (see workflow/draft-template.md), plus "Priority: Now, Next, or Later". Entries here may still be missing parents. The next draft is filled from Now, completing whole chains first.
 
 ---
+
+## Bugs
+
+Defects in what is already built, one line each, naming the feature: `- [ ] F-012: what is wrong (found YYYY-MM-DD)`. A fix does not change the plan, so it needs no push. Tick the line when it is fixed (`- [x]`); the next `save-prototype` or `record-release` moves ticked bugs into that version's log entry.
 
 ## Dropped
 

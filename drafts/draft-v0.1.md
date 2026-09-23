@@ -24,7 +24,10 @@ Nothing yet.
 - Serves: P-001, or "Title of an entry in this draft"
 - Also serves: none
 - Label: (optional, 2–4 words for the map)
+- Needs: (features only, optional: features that must be built first)
+- Done when: (features only: one or two sentences someone can check)
 - Design location: (features only)
+- Priority: (backlog only: Now, Next, or Later)
 - Open questions: none
 ```
 
@@ -34,11 +37,17 @@ To change something that is already pushed:
 ### What changes
 - Type: Amendment
 - Amends: S-002
-- Description: what changes and why (new text, a link to remove, or a Solved or Done mark)
+- Description: what changes and why (this line is the reason; it is not copied into the plan)
+- New text: (only to replace the item's description)
 - Serves: (only if the item moves to a new home parent)
 - Also serves: (only the links it adds)
+- Remove links: (only also-serves links to take away)
+- Needs, Done when, Design location, Label, Open questions: (only the ones that change)
+- Status: (only to mark a problem Solved or an objective Done)
 - Retire: yes (only to retire the item)
 ```
+
+`apply-draft` writes all of this into plan/ at the push; nothing is copied by hand.
 
 ---
 

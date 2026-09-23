@@ -14,7 +14,7 @@
 --t3bg:oklch(0.955 0.032 168);--t3tx:oklch(0.41 0.100 168);--t3ln:oklch(0.79 0.060 168);
 --t4bg:oklch(0.975 0.003 265);--t4tx:oklch(0.42 0.010 265);--t4ln:oklch(0.79 0.010 265);
 --t5bg:oklch(0.955 0.040 75);--t5tx:oklch(0.44 0.100 75);--t5ln:oklch(0.80 0.070 75);
---new:oklch(0.62 0.15 60);--amd:oklch(0.53 0.16 255);--rp:oklch(0.53 0.20 300);--cut:oklch(0.55 0.19 25);
+--new:oklch(0.62 0.15 60);--amd:oklch(0.53 0.16 255);--rp:oklch(0.53 0.20 300);--cut:oklch(0.55 0.19 25);--ok:oklch(0.52 0.13 150);
 --focus:oklch(0.47 0.200 268);
 --radius:8px;
 --ease:cubic-bezier(0.22,1,0.36,1);
@@ -28,7 +28,7 @@
 --t3bg:oklch(0.290 0.055 168);--t3tx:oklch(0.865 0.080 168);--t3ln:oklch(0.470 0.080 168);
 --t4bg:oklch(0.275 0.010 265);--t4tx:oklch(0.800 0.008 265);--t4ln:oklch(0.450 0.012 265);
 --t5bg:oklch(0.300 0.055 75);--t5tx:oklch(0.880 0.080 75);--t5ln:oklch(0.500 0.090 75);
---new:oklch(0.82 0.14 75);--amd:oklch(0.76 0.13 255);--rp:oklch(0.77 0.17 300);--cut:oklch(0.74 0.15 25);
+--new:oklch(0.82 0.14 75);--amd:oklch(0.76 0.13 255);--rp:oklch(0.77 0.17 300);--cut:oklch(0.74 0.15 25);--ok:oklch(0.78 0.14 150);
 --focus:oklch(0.87 0.140 250);
 }}
 :root[data-theme="dark"]{
@@ -40,7 +40,7 @@
 --t3bg:oklch(0.290 0.055 168);--t3tx:oklch(0.865 0.080 168);--t3ln:oklch(0.470 0.080 168);
 --t4bg:oklch(0.275 0.010 265);--t4tx:oklch(0.800 0.008 265);--t4ln:oklch(0.450 0.012 265);
 --t5bg:oklch(0.300 0.055 75);--t5tx:oklch(0.880 0.080 75);--t5ln:oklch(0.500 0.090 75);
---new:oklch(0.82 0.14 75);--amd:oklch(0.76 0.13 255);--rp:oklch(0.77 0.17 300);--cut:oklch(0.74 0.15 25);
+--new:oklch(0.82 0.14 75);--amd:oklch(0.76 0.13 255);--rp:oklch(0.77 0.17 300);--cut:oklch(0.74 0.15 25);--ok:oklch(0.78 0.14 150);
 --focus:oklch(0.87 0.140 250);
 }
 *{box-sizing:border-box}
@@ -91,6 +91,8 @@ h1{margin:0;font-size:1.25rem;font-weight:500;letter-spacing:-0.01em}
 .tg.mk-cut,.key b.mk-cut{background:var(--cut)}
 .key i.nw{border-color:var(--new)}
 .key i.rp{border-color:var(--rp)}
+.ok{margin-left:6px;font-weight:700;color:var(--ok)}
+.key .ok{margin:0}
 .bg{position:absolute;top:7px;right:7px;width:17px;height:17px;border-radius:50%;font-size:0.6875rem;line-height:16px;text-align:center;background:var(--bg);border:1px solid currentColor}
 .dt{margin-top:18px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--s1);min-height:64px;font-size:0.875rem}
 .dt .ttl{display:block;margin-bottom:5px}
@@ -132,7 +134,8 @@ noscript{display:block;margin:20px 0;color:var(--ink2)}
      layers : columns, left to right. tone t1..t5 picks the colour.
      nodes  : id, layer key, short label, full title,
               ref  = the real ID (O-001, S-002, ...) for pushed items,
-              mark = "new" | "amended" | "cut" (optional).
+              mark = "new" | "amended" | "cut" (optional),
+              built = 1 when the prototype or the product builds it (shown as a ✓).
      links  : [child, parent, 1 = home parent (solid) | 0 = also serves (dashed),
                "new" (optional) = a link this draft or version adds].
               A new link between two items that already existed is shown in
@@ -180,12 +183,14 @@ var cnt={"new":0,"amended":0,"cut":0},nl=0,rp=0;
 DATA.nodes.forEach(function(n){if(mark(n.id))cnt[n.mark]++});
 LINKS.forEach(function(e){var k=kind(e);if(k)nl++;if(k==="rp")rp++});
 var marked=cnt["new"]+cnt.amended+cnt.cut+nl>0;
+var nbuilt=DATA.nodes.filter(function(n){return n.built}).length;
 document.getElementById("mta").textContent=[DATA.note,DATA.nodes.length+" items",LINKS.length+" links",shared+" serve more than one parent"].filter(Boolean).join("  ·  ");
 
 /* legend */
 var h="";
 DATA.layers.forEach(function(l){h+='<span class="kk '+l.tone+'">'+esc(label(l.key))+"</span>"});
 h+='<span class="sp"></span><span>Solid line: home parent</span><span class="sp"></span><span>Dashed: also serves</span><span class="sp"></span><span>Badge: number of parents</span>';
+if(nbuilt)h+='<span class="sp"></span><span class="key"><span class="ok">\u2713</span>built</span>';
 if(marked){h+='<span class="sp"></span>';
 if(cnt["new"])h+='<span class="key"><b class="mk-new">NEW</b>not pushed yet</span>';
 if(cnt.amended)h+='<span class="key"><b class="mk-amd">AMENDED</b>changed</span>';
@@ -205,9 +210,10 @@ var ids=[];
 DATA.nodes.filter(function(n){return n.layer===l.key}).forEach(function(n){
 var p=(up[n.id]||[]).length,m=mark(n.id),b=document.createElement("button");
 b.type="button";b.className="nd "+l.tone+(p>1?" b":"")+(m?" "+MC[m]:"");b.dataset.id=n.id;
-b.title=(n.ref?n.ref+" — ":"")+n.full;
+b.title=(n.ref?n.ref+" — ":"")+n.full+(n.built?" (built)":"");
 var lb=document.createElement("span");lb.className="lb";lb.textContent=n.short||n.full;b.appendChild(lb);
 if(m){var tg=document.createElement("span");tg.className="tg "+MC[m];tg.textContent=MK[m]+" · "+label(l.key);b.appendChild(tg)}
+if(n.built){var ok=document.createElement("span");ok.className="ok";ok.textContent="\u2713";ok.setAttribute("aria-label","built");lb.appendChild(ok)}
 if(p>1){var s=document.createElement("span");s.className="bg";s.textContent=p;b.appendChild(s)}
 ar.appendChild(b);nd[n.id]=b;ids.push(n.id)});
 cols.push({area:ar,ids:ids});
@@ -268,7 +274,7 @@ function nm(x){var n=T[x];return esc(n.full)+(n.ref?' <span class="rf">'+esc(n.r
 function note(c,p){var e=LK[c+"|"+p],k=kind(e);return k?" <i>(new "+(e[2]?"home":"also-serves")+" link"+(k==="rp"?", between existing items":"")+")</i>":""}
 function info(id){var n=T[id],m=mark(id),ps=(up[id]||[]).slice(),cs=dn[id]||[];
 ps.sort(function(a,b){return LK[id+"|"+b][2]-LK[id+"|"+a][2]});
-var h='<span class="ttl"><b>'+esc(label(n.layer))+(n.ref?" "+esc(n.ref):"")+"</b> — "+esc(n.full)+(m?'<span class="tg in '+MC[m]+'">'+MK[m]+"</span>":"")+"</span>";
+var h='<span class="ttl"><b>'+esc(label(n.layer))+(n.ref?" "+esc(n.ref):"")+"</b> — "+esc(n.full)+(n.built?'<span class="ok">\u2713 built</span>':"")+(m?'<span class="tg in '+MC[m]+'">'+MK[m]+"</span>":"")+"</span>";
 if(ps.length)h+='<span class="sv">Serves '+ps.length+": "+ps.map(function(x){return nm(x)+note(id,x)}).join("  ·  ")+"</span>";
 if(cs.length)h+='<span class="sv">Served by '+cs.length+": "+cs.map(function(x){return nm(x)+note(x,id)}).join("  ·  ")+"</span>";
 return h}

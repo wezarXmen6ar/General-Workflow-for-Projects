@@ -2,6 +2,50 @@
 
 Changes to the workflow itself (CLAUDE.md, templates, and tools). Each entry is the approved table of affected rules: kept, changed, removed, or fixed, and why.
 
+## Workflow 1.4 (2026-09-23)
+
+A full cycle: from the first idea to released versions of the real product and the project's close.
+
+| # | Rule | Status | Now |
+|---|---|---|---|
+| 1 | Technical design | New | At v1.0, `record-push` adds product/design.md (stack, architecture, data, integrations, environments, tests), filled in before building and changed only with the user's approval. |
+| 2 | Product traceability | Changed | Code and tests in product/ name the feature ID they build; `check` reports IDs there that don't exist or are retired. |
+| 3 | Testing | New | Every product feature gets at least one test, named with its ID and based on its "Done when". |
+| 4 | Releases | New | `record-release vX --approved-by NAME` fills the log's Released line; the commit is tagged `vX-release`. |
+| 5 | Status report | New | `status` lists what is covered, built, accepted, and missing, open questions and bugs, backlog priorities, and v1.0 readiness. |
+| 6 | The v1.0 decision | Changed | `record-push v1.0` refuses while the prototype has gaps, unless the user accepts them in writing (`--accept-gaps`, recorded in the log). |
+| 7 | Done when | New | Every feature has a "Done when" line; `check --push` requires it. |
+| 8 | Review | New | prototype/REVIEW.md (from v1.0, product/REVIEW.md): who reviewed, what was accepted, findings. Required by `save-prototype` and `record-release`, and frozen with the version. Findings go to the backlog. |
+| 9 | Bugs | New | The backlog's Bugs section, one ticked line per defect; fixes need no push and move into the version's log entry when saved or released. |
+| 10 | Open questions | Changed | They stay with the item in the plan at a push; an answer comes back as an Amendment. |
+| 11 | Priority | New | Backlog entries are Now, Next, or Later; the next draft is filled from Now, whole chains first. |
+| 12 | Approval record | Changed | `record-push` and `record-release` require `--approved-by`; the log records who and when. |
+| 13 | Constraints | New | plan/constraints.md, changed only with the user's approval and saved with every version. |
+| 14 | Dependencies | New | A feature's "Needs" lists features to build first; `status` shows features waiting for them. |
+| 15 | One session at a time | New | Start with `git pull` and `check`; end with commit and push. |
+| 16 | Tests for the workflow | New | workflow/test_tool.py runs the whole cycle in a temporary copy; run it after any change in workflow/. |
+| 17 | Closing the project | New | When every objective is Done or Retired, a final version with a closing note. |
+| 18 | Changelog order | Fixed | Newest first (1.3 was below 1.2). |
+| 19 | Built features on the map | Changed | The map design gains a ✓ on features built in the prototype or the product (plan, draft and backlog maps). |
+| 20 | Push step 2 | Changed | `apply-draft` writes the approved draft into plan/ with new IDs, under each home parent, and applies every amendment; entries not approved (`--skip`) go back to the backlog. |
+| — | Amendments | Changed | They name only the fields that change: New text, Serves, Also serves, Remove links, Needs, Done when, Design location, Label, Open questions, Status (Solved or Done), Retire. |
+
+## Workflow 1.3 (2026-09-23)
+
+A folder structure that follows the work: plan, drafts, versions, prototype, product.
+
+| Rule | Status | Now |
+|---|---|---|
+| Main documents and prototype.md at the top level | Changed | In plan/, with plan/map.html showing everything pushed. The top level keeps only CLAUDE.md and README.md. |
+| Pushed and abandoned drafts kept in drafts/ as frozen records (1.2) | Changed | drafts/ holds only backlog.md and the one open draft. At a push the draft moves into versions/vX/; an abandoned draft moves into versions/abandoned/ with the new `abandon-draft` command. Both stay frozen there, and abandoned numbers are still never reused. |
+| A version folder holds the three documents and the map | Changed | versions/vX/ holds everything about the version: the plan as pushed (with prototype.md), its map, the draft that proposed it, and the prototype built for it. |
+| The prototype is one live folder | Changed | Still one live prototype/, and `save-prototype vX` keeps a frozen copy of each version's prototype, so versions can be compared. The log's Prototype line records it. |
+| The real product | New | product/ starts at v1.0. Each piece of product code names the feature ID it builds. |
+| Tool and templates in tools/ and templates/ | Changed | Together in workflow/ (tool.py, map-template.html, draft-template.md, CHANGELOG.md). |
+| The prototype's "!" marker files | Changed | In prototype/trace/. |
+| Moving to this workflow from an older one | New | Older dotted IDs (S-002.1) are read as they are, never renamed. Old back-link lines are ignored when versions are compared. Frozen files are checked from their last move, and history/ keeps old files, frozen. |
+| `record-push` | Changed | Takes an optional `--note` for the log. |
+
 ## Workflow 1.2 (2026-09-23)
 
 A consistency pass: places where the rules contradicted each other or the tool.
@@ -20,22 +64,6 @@ A consistency pass: places where the rules contradicted each other or the tool.
 | Retired and rolled-back features | New | They are taken out of the prototype (`check` already reported them). |
 | Amendments | Changed | The template says what an amendment can carry: new text, a link to remove, or a Solved or Done mark. |
 | Starting a project from this repository | Changed | "Use this template" works only once the repository is marked as a template; cloning always works. |
-
-## Workflow 1.3 (2026-09-23)
-
-A folder structure that follows the work: plan, drafts, versions, prototype, product.
-
-| Rule | Status | Now |
-|---|---|---|
-| Main documents and prototype.md at the top level | Changed | In plan/, with plan/map.html showing everything pushed. The top level keeps only CLAUDE.md and README.md. |
-| Pushed and abandoned drafts kept in drafts/ as frozen records (1.2) | Changed | drafts/ holds only backlog.md and the one open draft. At a push the draft moves into versions/vX/; an abandoned draft moves into versions/abandoned/ with the new `abandon-draft` command. Both stay frozen there, and abandoned numbers are still never reused. |
-| A version folder holds the three documents and the map | Changed | versions/vX/ holds everything about the version: the plan as pushed (with prototype.md), its map, the draft that proposed it, and the prototype built for it. |
-| The prototype is one live folder | Changed | Still one live prototype/, and `save-prototype vX` keeps a frozen copy of each version's prototype, so versions can be compared. The log's Prototype line records it. |
-| The real product | New | product/ starts at v1.0. Each piece of product code names the feature ID it builds. |
-| Tool and templates in tools/ and templates/ | Changed | Together in workflow/ (tool.py, map-template.html, draft-template.md, CHANGELOG.md). |
-| The prototype's "!" marker files | Changed | In prototype/trace/. |
-| Moving to this workflow from an older one | New | Older dotted IDs (S-002.1) are read as they are, never renamed. Old back-link lines are ignored when versions are compared. Frozen files are checked from their last move, and history/ keeps old files, frozen. |
-| `record-push` | Changed | Takes an optional `--note` for the log. |
 
 ## Workflow 1.1 (2026-09-23)
 

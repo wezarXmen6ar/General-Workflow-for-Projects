@@ -8,6 +8,7 @@ What the project must achieve. Only pushed entries live here, and this file chan
 ## O-001: Title
 - Description:
 - Label: (optional, 2–4 words for the map)
+- Open questions: (optional)
 - Status: Open | Done | Retired
 - Served by: (generated)
 ```

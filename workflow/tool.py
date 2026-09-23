@@ -8,10 +8,16 @@ Run from the project root (or anywhere; paths are relative to the folder above w
                                                    and the prototype's trace data
   python workflow/tool.py next-ids                 next free ID of each kind
   python workflow/tool.py new-draft VERSION        start the next draft (only when no draft is open)
-  python workflow/tool.py record-push VERSION [--note TEXT]
+  python workflow/tool.py record-push VERSION --approved-by NAME [--note TEXT]
                                                    save versions/VERSION/, add the log entry, and move the
                                                    pushed draft into that folder
-  python workflow/tool.py save-prototype VERSION   save the live prototype into versions/VERSION/prototype/
+  python workflow/tool.py status                   what is covered, built, accepted, open, and still missing
+  python workflow/tool.py apply-draft [--skip TITLE] [--dry-run]
+                                                   write the open draft's entries into plan/ with new IDs
+                                                   (entries not approved go back to the backlog)
+  python workflow/tool.py save-prototype VERSION   save the reviewed prototype into versions/VERSION/prototype/
+  python workflow/tool.py record-release VERSION --approved-by NAME
+                                                   from v1.0: release the reviewed product for that version
   python workflow/tool.py abandon-draft            give up the open draft: its entries go back to the backlog,
                                                    and the draft is kept, frozen, in versions/abandoned/
 
@@ -31,6 +37,7 @@ PLAN = ROOT / "plan"
 MAIN_DOCS = ["objectives.md", "problems.md", "solutions.md"]
 PLAN_MAP = PLAN / "map.html"
 PROTOTYPE_BRIEF = PLAN / "prototype.md"
+CONSTRAINTS = PLAN / "constraints.md"
 DRAFTS = ROOT / "drafts"
 BACKLOG = DRAFTS / "backlog.md"
 VERSIONS = ROOT / "versions"
@@ -43,6 +50,13 @@ TEMPLATE_DRAFT = WORKFLOW / "draft-template.md"
 PROTOTYPE = ROOT / "prototype"
 TRACE = PROTOTYPE / "trace"
 CHAIN_JS = TRACE / "chain.js"
+PROTO_REVIEW = PROTOTYPE / "REVIEW.md"
+PRODUCT = ROOT / "product"
+PRODUCT_REVIEW = PRODUCT / "REVIEW.md"
+PRODUCT_DESIGN = PRODUCT / "design.md"
+TEMPLATE_REVIEW = WORKFLOW / "review-template.md"
+TEMPLATE_DESIGN = WORKFLOW / "design-template.md"
+SKIP_DIRS = {"node_modules", ".git", "dist", "build", "__pycache__", ".venv", "venv", ".next", "target"}
 TOOL = "workflow/tool.py"
 
 TYPE_NAME = {"objective": "Objective", "problem": "Problem", "solution": "Solution",
@@ -67,7 +81,11 @@ FIELD = re.compile(r"^-\s+([A-Za-z][A-Za-z -]*?)\s*(?:\([^)]*\))?\s*:\s?(.*)$")
 # Back-link lines written by hand in older versions of this workflow; "Served by" replaces them.
 LEGACY_BACKLINKS = {"problems", "also served by", "solutions", "also solved by"}
 FIELDS = {"type", "description", "idea", "serves", "home parent", "also serves", "amends",
-          "retire", "label", "design location", "open questions", "status", "served by"} | LEGACY_BACKLINKS
+          "retire", "label", "design location", "open questions", "status", "served by",
+          "done when", "needs", "priority", "remove links", "new text"} | LEGACY_BACKLINKS
+PRIORITIES = ("now", "next", "later")
+BUG_LINE = re.compile(r"^\s*-\s*\[( |x|X)\]\s*(.*?)\s*$")
+REVIEW_KEYS = ("version", "date", "reviewed by", "accepted", "not accepted", "findings")
 ALIAS = {"idea": "description", "home parent": "serves"}
 # IDs are flat (S-004). Older dotted IDs (S-002.1) are read as they are and never renamed.
 ID_HEAD = re.compile(r"^([OPSF])-(\d{3,}(?:\.\d+)*)\b\s*[:.\u2014\u2013-]?\s*(.*)$")
@@ -323,6 +341,13 @@ class Item:
         self.serves, self.also, self.status = None, [], ""
         self.label = block.get("label")
         self.retired = False
+        self.needs, self.done_when = [], block.get("done when").strip()
+        self.questions = open_questions(block.get("open questions"))
+
+
+def open_questions(value):
+    v = " ".join((value or "").split())
+    return "" if v.lower() in ("", "none", "none yet", "-", "n/a") else value.strip()
 
 
 class Main:
@@ -368,6 +393,7 @@ class Main:
             it.serves = ids[0] if ids else None
             arefs, _ = parse_refs(it.block.get("also serves"))
             it.also = [r[1] for r in arefs if r[0] == "id"]
+            it.needs = [r[1] for r in parse_refs(it.block.get("needs"))[0] if r[0] == "id"]
             it.status = " ".join(it.block.get("status").split()).lower()
             it.retired = it.status == "retired"
         for it in self.items.values():  # a solution that serves a solution is a sub-solution
@@ -462,6 +488,24 @@ def check_main(main, issues):
                 issues.error(where, b.line("status"), f"{it.id}: Status is either left out or Retired")
             if it.type == "feature" and not b.get("design location").strip():
                 issues.warn(where, b.line(), f"{it.id} has no Design location")
+            if it.type == "feature" and not it.done_when and not it.retired:
+                issues.warn(where, b.line(), f'{it.id} has no "Done when" (add it with an Amendment)')
+        if "needs" in b.fields:
+            nrefs, nstray = parse_refs(b.get("needs"))
+            if it.type != "feature":
+                issues.warn(where, b.line("needs"), f'{it.id}: only features have "Needs"')
+            if any(r[0] == "title" for r in nrefs) or nstray:
+                issues.error(where, b.line("needs"), f"{it.id}: in the plan, Needs must list IDs")
+            for n in it.needs:
+                q = main.items.get(n)
+                if n == it.id:
+                    issues.error(where, b.line("needs"), f"{it.id} cannot need itself")
+                elif not q:
+                    issues.error(where, b.line("needs"), f"{it.id} needs {n}, which does not exist")
+                elif q.type != "feature":
+                    issues.error(where, b.line("needs"), f"{it.id} needs {n}, which is not a feature")
+                elif q.retired and not it.retired:
+                    issues.warn(where, b.line("needs"), f"{it.id} needs {n}, which is retired")
         want = {"objective": 2, "problem": 2, "solution": 2, "sub-solution": 3, "feature": 4}[it.type]
         if b.level != want:
             issues.warn(where, b.line(), f"{it.id} ({TYPE_NAME[it.type]}) is usually a level-{want} heading")
@@ -527,6 +571,10 @@ class Entry:
         self.retire = block.get("retire").strip().lower() in ("yes", "true", "y")
         self.home = None      # resolved ("item", Item) | ("entry", Entry)
         self.also = []
+        self.needs = []       # resolved features this one needs first
+        self.remove = []      # amendments: pushed links to remove
+        self.status = ""      # amendments: a new Status (Solved, Done, Open)
+        self.priority = " ".join(block.get("priority").split()).lower()
 
 
 class Draft:
@@ -568,6 +616,13 @@ def find_drafts():
     if DRAFTS.exists():
         out += [Draft(f) for f in sorted(DRAFTS.glob("draft-*.md"))]
     return out
+
+
+def removed_already(iid, target):
+    """True when the latest saved version still had this also-serves link (a push is removing it now)."""
+    folder = latest_version()
+    old = Main(folder, Issues()).items.get(iid) if folder else None
+    return bool(old) and target in old.also
 
 
 def resolve_draft(draft, main, issues, backlog_titles, strict):
@@ -678,6 +733,44 @@ def resolve_draft(draft, main, issues, backlog_titles, strict):
             e.also.append(r)
         if e.type == "feature" and strict and not b.get("design location").strip():
             issues.warn(where, b.line(), f'"{e.title}" has no Design location')
+        if e.type == "feature" and not b.get("done when").strip():
+            todo(where, b.line(), f'"{e.title}" has no "Done when"')
+        if e.priority and e.priority not in PRIORITIES:
+            issues.warn(where, b.line("priority"), f'"{e.title}": Priority is Now, Next, or Later')
+        nrefs, nstray = parse_refs(b.get("needs"))
+        if nstray:
+            issues.warn(where, b.line("needs"), f'"{e.title}": put titles in double quotes (could not read "{nstray}")')
+        if nrefs and ctype != "feature":
+            issues.warn(where, b.line("needs"), f'"{e.title}": only features have "Needs"')
+        for ref in nrefs:
+            r = res(ref, "needs")
+            if r and r[1] is e:
+                issues.error(where, b.line("needs"), f'"{e.title}" cannot need itself')
+            elif r and r[1].type != "feature":
+                issues.error(where, b.line("needs"), f'"{e.title}" needs "{r[1].title}", which is not a feature')
+            elif r:
+                e.needs.append(r)
+        if e.type == "amendment":
+            for ref in parse_refs(b.get("remove links"))[0]:
+                r = res(ref, "remove links")
+                if not r:
+                    continue
+                target = r[1].id if r[0] == "item" else None
+                if target is not None and target not in e.amends.also and removed_already(e.amends.id, target):
+                    continue  # apply-draft already took it out; the push is in progress
+                if target is None or target not in e.amends.also:
+                    issues.error(where, b.line("remove links"),
+                                 f'"{e.title}": {e.amends.id} does not also serve "{r[1].title}"; only also-serves links can be removed')
+                else:
+                    e.remove.append(target)
+            st = " ".join(b.get("status").split()).lower()
+            if st:
+                ok = {"objective": ("open", "done"), "problem": ("open", "solved")}.get(ctype, ())
+                if st not in ok:
+                    issues.error(where, b.line("status"), f'"{e.title}": Status can only mark an objective Open or Done, '
+                                                          'or a problem Open or Solved (use "Retire: yes" to retire)')
+                else:
+                    e.status = st
     if same_as_pushed:
         n = len(same_as_pushed)
         issues.warn(where, 0, f"{n} {'entry has' if n == 1 else 'entries have'} the same title as a pushed item "
@@ -693,10 +786,10 @@ class Graph:
         self.nodes = {}   # key -> dict(key, type, full, short, ref, mark, seq)
         self.links = []   # (child, parent, home, new)
 
-    def node(self, key, type_, full, short, ref="", mark="", seq=0):
+    def node(self, key, type_, full, short, ref="", mark="", seq=0, built=False):
         if key not in self.nodes:
             self.nodes[key] = {"key": key, "type": type_, "full": full, "short": short,
-                               "ref": ref, "mark": mark if self.highlight else "", "seq": seq}
+                               "ref": ref, "mark": mark if self.highlight else "", "seq": seq, "built": built}
         return self.nodes[key]
 
     def link(self, c, p, home, new=False):
@@ -729,6 +822,8 @@ class Graph:
                 d["ref"] = n["ref"]
             if n["mark"]:
                 d["mark"] = n["mark"]
+            if n.get("built"):
+                d["built"] = 1
             nodes.append(d)
         rank = {n["key"]: i for i, n in enumerate(order)}
         links = sorted(self.links, key=lambda l: (rank[l[0]], -l[2], rank[l[1]]))
@@ -794,7 +889,7 @@ class Graph:
         return "```\n" + "\n".join(out) + "\n```"
 
 
-def draft_graph(draft, main):
+def draft_graph(draft, main, built=frozenset()):
     """Pushed context (all objectives and problems, plus the chains this draft touches) and the draft's own entries."""
     highlight = bool(main.items)
     g = Graph(draft.title, f"Generated from {draft.path.name} by {TOOL} \u2014 edit the text, not this map", highlight)
@@ -817,7 +912,7 @@ def draft_graph(draft, main):
         it = main.items[iid]
         am = amended.get(iid)
         mark = ("cut" if am.retire else "amended") if am else ""
-        g.node(iid, it.type, it.title, short_label(it.title, it.label), iid, mark, it.seq)
+        g.node(iid, it.type, it.title, short_label(it.title, it.label), iid, mark, it.seq, iid in built)
     for e in draft.entries:
         if e.type in TYPE_NAME:
             g.node(e.key, e.type, e.title, short_label(e.title, e.label), "", "new", 100000 + e.index)
@@ -871,11 +966,11 @@ def version_graph(version, main, prev):
     return g
 
 
-def plan_graph(main):
+def plan_graph(main, built=frozenset()):
     """The whole plan as it stands: everything pushed, nothing marked."""
     g = Graph("Plan", f"Everything pushed so far \u00b7 generated by {TOOL}", False)
     for it in main.ordered(main.active()):
-        g.node(it.id, it.type, it.title, short_label(it.title, it.label), it.id, "", it.seq)
+        g.node(it.id, it.type, it.title, short_label(it.title, it.label), it.id, "", it.seq, it.id in built)
     for it in main.ordered(main.active()):
         if it.serves:
             g.link(it.id, it.serves, True)
@@ -942,9 +1037,9 @@ def chain_js(main):
             f"window.TRACE_CHAIN = {body};\n")
 
 
-def draft_outputs(draft, main):
+def draft_outputs(draft, main, built=frozenset()):
     """The regenerated draft text and map; `missing` lists generated blocks without markers."""
-    g = draft_graph(draft, main)
+    g = draft_graph(draft, main, built)
     text = draft.tf.text
     missing = []
     for name, content in (("tree", g.tree()), ("copied", copied_block(main))):
@@ -954,6 +1049,115 @@ def draft_outputs(draft, main):
         else:
             text = new
     return text, render_map(g), missing
+
+
+# --------------------------------------------------------------------------- bugs, reviews, what is built
+
+def bugs(backlog):
+    """The backlog's Bugs section: (line index, fixed?, text) for each "- [ ] ..." line."""
+    out, inside = [], False
+    if backlog is None:
+        return out
+    hidden = mask(backlog.lines)
+    for i, ln in enumerate(backlog.lines):
+        if hidden[i]:
+            continue
+        h = HEADING.match(ln)
+        if h and len(h.group(1)) <= 2:
+            inside = len(h.group(1)) == 2 and h.group(2).strip().lower().startswith("bugs")
+            continue
+        m = BUG_LINE.match(ln) if inside else None
+        if m:
+            out.append((i, m.group(1).lower() == "x", m.group(2)))
+    return out
+
+
+def read_review(path):
+    """A review file's fields. A value still in "(...)" is the template's hint and counts as empty."""
+    vals = {}
+    if Path(path).exists():
+        for ln in TextFile(path).text.split("\n"):
+            m = re.match(r"^-\s+([A-Za-z][A-Za-z ]*?)\s*:\s?(.*)$", ln)
+            key = m.group(1).lower() if m else None
+            if key in REVIEW_KEYS and key not in vals:
+                v = m.group(2).strip()
+                vals[key] = "" if re.fullmatch(r"\(.*\)", v) else v
+    return vals
+
+
+def review_filled(vals):
+    return bool(vals.get("date")) and bool(vals.get("reviewed by"))
+
+
+def ids_in(text):
+    return [f"{m.group(1)}-{m.group(2)}" for m in ID_RE.finditer(text or "")]
+
+
+def saved_reviews():
+    """Saved reviews, oldest first: (version, path)."""
+    out = []
+    for f in version_folders():
+        for path in (f / "prototype" / "REVIEW.md", f / "review.md"):
+            if path.exists():
+                out.append((f.name, path))
+    return out
+
+
+def accepted_features():
+    """Feature ID -> the review that last accepted it (a later "Not accepted" takes it back)."""
+    acc = {}
+    live = [("prototype/REVIEW.md", PROTO_REVIEW), ("product/REVIEW.md", PRODUCT_REVIEW)]
+    for label, path in saved_reviews() + live:
+        vals = read_review(path)
+        if not review_filled(vals):
+            continue
+        for iid in ids_in(vals.get("accepted")):
+            acc[iid] = label
+        for iid in ids_in(vals.get("not accepted")):
+            acc.pop(iid, None)
+    return acc
+
+
+def text_files(folder, skip_md=False):
+    for f in sorted(Path(folder).rglob("*")):
+        if not f.is_file() or any(part in SKIP_DIRS for part in f.relative_to(folder).parts[:-1]):
+            continue
+        if skip_md and f.suffix.lower() == ".md":
+            continue
+        try:
+            yield f, TextFile(f).text
+        except (UnicodeDecodeError, OSError):
+            continue
+
+
+def prototype_markers():
+    """(file, line, ID) for every "!" marker in the live prototype."""
+    out = []
+    if PROTOTYPE.exists():
+        for f, text in text_files(PROTOTYPE):
+            if f.suffix.lower() not in (".html", ".htm", ".js") or TRACE in f.parents:
+                continue
+            for n, ln in enumerate(text.split("\n"), 1):
+                chunks = [m.group(1) for m in TRACE_ATTR.finditer(ln)] + [m.group(1) for m in TRACE_JS.finditer(ln)]
+                out += [(f, n, iid) for chunk in chunks for iid in ids_in(chunk)]
+    return out
+
+
+def product_ids():
+    """(file, line, ID) for every plan ID named in the product's code (its .md notes are not code)."""
+    out = []
+    if PRODUCT.exists():
+        for f, text in text_files(PRODUCT, skip_md=True):
+            for n, ln in enumerate(text.split("\n"), 1):
+                out += [(f, n, iid) for iid in ids_in(ln)]
+    return out
+
+
+def built_features(main):
+    """Pushed features that the prototype (a "!" marker) or the product (its ID in code) builds."""
+    found = {iid for _, _, iid in prototype_markers() + product_ids()}
+    return frozenset(iid for iid in found if iid in main.items and main.items[iid].type == "feature"
+                     and not main.items[iid].retired)
 
 
 # --------------------------------------------------------------------------- versions and git
@@ -1030,7 +1234,8 @@ def added_in(path):
 def check_frozen_files(folder, issues, what):
     """Every file under a frozen folder must be unchanged since it was added (or last moved)."""
     waiting = False
-    for f in sorted(p for p in Path(folder).rglob("*") if p.is_file()):
+    files = [Path(folder)] if Path(folder).is_file() else sorted(p for p in Path(folder).rglob("*") if p.is_file())
+    for f in files:
         base = added_in(f)
         if not base:
             waiting = True
@@ -1075,21 +1280,40 @@ def draft_arg(value):
 # --------------------------------------------------------------------------- check
 
 def prototype_marker_issues(main, issues):
-    if not PROTOTYPE.exists():
-        return
-    for f in sorted(PROTOTYPE.rglob("*")):
-        if f.suffix.lower() not in (".html", ".htm", ".js") or TRACE in f.parents:
-            continue
-        for n, ln in enumerate(TextFile(f).text.split("\n"), 1):
-            found = [m.group(1) for m in TRACE_ATTR.finditer(ln)] + [m.group(1) for m in TRACE_JS.finditer(ln)]
-            for chunk in found:
-                for m in ID_RE.finditer(chunk):
-                    iid = f"{m.group(1)}-{m.group(2)}"
-                    it = main.items.get(iid)
-                    if not it:
-                        issues.error(rel(f), n, f"marker uses {iid}, which is not pushed")
-                    elif it.retired:
-                        issues.error(rel(f), n, f"marker uses {iid}, which is retired")
+    for f, n, iid in prototype_markers():
+        it = main.items.get(iid)
+        if not it:
+            issues.error(rel(f), n, f"marker uses {iid}, which is not pushed")
+        elif it.retired:
+            issues.error(rel(f), n, f"marker uses {iid}, which is retired")
+
+
+def product_id_issues(main, issues):
+    for f, n, iid in product_ids():
+        it = main.items.get(iid)
+        if not it:
+            issues.error(rel(f), n, f"code names {iid}, which is not pushed")
+        elif it.retired:
+            issues.error(rel(f), n, f"code names {iid}, which is retired")
+
+
+def review_and_bug_issues(ctx, issues):
+    main = ctx.main
+    for path in (PROTO_REVIEW, PRODUCT_REVIEW):
+        vals = read_review(path)
+        for key in ("accepted", "not accepted"):
+            for iid in ids_in(vals.get(key)):
+                it = main.items.get(iid)
+                if not it or it.type != "feature":
+                    issues.error(rel(path), 0, f'"{key.capitalize()}" lists {iid}, which is not a pushed feature')
+    if ctx.backlog:
+        for i, _, text in bugs(ctx.backlog):
+            for iid in ids_in(text):
+                it = main.items.get(iid)
+                if not it:
+                    issues.error(ctx.backlog.rel, i + 1, f"the bug names {iid}, which is not pushed")
+                elif it.retired:
+                    issues.warn(ctx.backlog.rel, i + 1, f"the bug names {iid}, which is retired")
 
 
 def run_checks(ctx):
@@ -1099,7 +1323,8 @@ def run_checks(ctx):
     for doc, text in fresh.items():
         if text != main.files[doc].text:
             issues.error(rel(PLAN / doc), 0, '"Served by" lines are out of date; run build')
-    if not PLAN_MAP.exists() or norm_text(TextFile(PLAN_MAP).text) != render_map(plan_graph(main)):
+    built = built_features(main)
+    if not PLAN_MAP.exists() or norm_text(TextFile(PLAN_MAP).text) != render_map(plan_graph(main, built)):
         issues.error(rel(PLAN_MAP), 0, "out of date; run build")
     # drafts
     if len(ctx.open) > 1:
@@ -1129,7 +1354,7 @@ def run_checks(ctx):
         for e in d.entries:
             if e.type != "amendment":
                 titles.setdefault(e.ntitle, []).append((d, e))
-        text, html, missing = draft_outputs(d, main)
+        text, html, missing = draft_outputs(d, main, built)
         for name in missing:
             issues.error(d.rel, 0, f"missing <!-- BEGIN/END GENERATED: {name} --> markers (see workflow/draft-template.md)")
         if text != d.tf.text:
@@ -1179,7 +1404,8 @@ def run_checks(ctx):
     # frozen files
     if in_git():
         for f in folders:
-            spec = [rel(f), f":(exclude){rel(f / 'prototype')}"]
+            # a saved prototype and a release review arrive after the tag; each is frozen from when it was added
+            spec = [rel(f), f":(exclude){rel(f / 'prototype')}", f":(exclude){rel(f / 'review.md')}"]
             if tag_exists(f.name):
                 changed, untracked, _ = git_changes(f.name, spec)
                 if changed or untracked:
@@ -1188,6 +1414,8 @@ def run_checks(ctx):
                 issues.warn(rel(f), 0, f"no git tag {f.name} yet; commit, tag {f.name} and push")
             if (f / "prototype").exists():
                 check_frozen_files(f / "prototype", issues, "a saved prototype")
+            if (f / "review.md").exists():
+                check_frozen_files(f / "review.md", issues, "a saved release review")
         if ABANDONED.exists():
             check_frozen_files(ABANDONED, issues, "an abandoned draft")
         if HISTORY.exists():
@@ -1199,6 +1427,8 @@ def run_checks(ctx):
         if not CHAIN_JS.exists() or norm_text(TextFile(CHAIN_JS).text) != chain_js(main):
             issues.error(rel(CHAIN_JS), 0, "out of date; run build")
     prototype_marker_issues(main, issues)
+    product_id_issues(main, issues)
+    review_and_bug_issues(ctx, issues)
     return issues
 
 
@@ -1219,7 +1449,8 @@ def summary(ctx):
         counts[it.type] = counts.get(it.type, 0) + 1
     parts = [f"{counts.get(t, 0)} {TYPE_NAME[t].lower()}{'' if counts.get(t, 0) == 1 else 's'}" for t in TYPE_NAME]
     latest = latest_version()
-    print("Plan: " + ", ".join(parts))
+    phase = "product (v1.0 reached)" if latest and version_key(latest.name) >= (1, 0) else "prototype"
+    print("Plan: " + ", ".join(parts) + f"  \u00b7  Phase: {phase}")
     print(f"Latest version: {latest.name if latest else 'none yet'}  \u00b7  "
           f"Open draft: {ctx.open[0].rel if ctx.open else 'none'}")
 
@@ -1245,9 +1476,10 @@ def build(ctx, writer):
             changed_main = True
     if changed_main:  # continue from the regenerated text (also correct in a dry run)
         ctx = Context(main_texts=fresh)
-    writer.write(PLAN_MAP, render_map(plan_graph(ctx.main)))
+    built = built_features(ctx.main)
+    writer.write(PLAN_MAP, render_map(plan_graph(ctx.main, built)))
     for d in ctx.drafts:
-        text, html, missing = draft_outputs(d, ctx.main)
+        text, html, missing = draft_outputs(d, ctx.main, built)
         for name in missing:
             print(f"  WARN  {d.rel} \u2014 no <!-- BEGIN/END GENERATED: {name} --> markers; that part was skipped")
         writer.write(d.path, text)
@@ -1271,6 +1503,114 @@ def cmd_build(args):
     print()
     n = print_issues(run_checks(ctx))
     return 1 if n["error"] else 0
+
+
+# --------------------------------------------------------------------------- log entries, backlog moves, readiness
+
+def entry_bounds(lines, v):
+    """(start, end) of version v's entry among the log's lines, or None."""
+    hidden = mask(lines)
+    start = None
+    for i, ln in enumerate(lines):
+        m = None if hidden[i] else re.match(r"^##\s+(v[\d.]+)", ln)
+        if m and start is not None:
+            return start, i
+        if m and m.group(1).rstrip(".") == v:
+            start = i
+    return (start, len(lines)) if start is not None else None
+
+
+def log_value(text, v, key):
+    lines = text.split("\n")
+    b = entry_bounds(lines, v)
+    if not b:
+        return None
+    for i in range(b[0] + 1, b[1]):
+        m = re.match(rf"^-\s+{key}:\s*(.*)$", lines[i])
+        if m:
+            return m.group(1).strip()
+    return None
+
+
+def with_log_line(text, v, key, value):
+    """Fill in one line of a version's entry (Prototype, Fixed, Released): replace it, or add it before Rollback."""
+    lines = text.split("\n")
+    b = entry_bounds(lines, v)
+    if not b:
+        raise SystemExit(f"{rel(LOG)} has no entry for {v}")
+    body = range(b[0] + 1, b[1])
+    line = f"- {key}: {value}"
+    cur = next((i for i in body if re.match(rf"^-\s+{key}:", lines[i])), None)
+    if cur is not None:
+        lines[cur] = line
+    else:
+        rollback = next((i for i in body if re.match(r"^-\s+Rollback:", lines[i])), None)
+        at = rollback if rollback is not None else max((i for i in body if lines[i].strip()), default=b[0]) + 1
+        lines.insert(at, line)
+    return "\n".join(lines)
+
+
+def take_fixed_bugs(ctx, writer):
+    """Remove the ticked bugs from the backlog and return their text."""
+    fixed = [(i, text) for i, done, text in bugs(ctx.backlog) if done]
+    if fixed:
+        lines = list(ctx.backlog.lines)
+        for i, _ in sorted(fixed, reverse=True):
+            del lines[i]
+        writer.write(BACKLOG, "\n".join(lines))
+    return [text for _, text in fixed]
+
+
+def entry_lines(draft, e):
+    lines = draft.lines[e.block.start:e.block.end]
+    while lines and (not lines[-1].strip() or RULE.match(lines[-1])):
+        lines = lines[:-1]
+    return lines
+
+
+def backlog_with(backlog, moved):
+    """The backlog's text with these lines added at the end of its Entries section."""
+    blines = backlog.lines
+    hidden = mask(blines)
+    start = next((i for i, l in enumerate(blines) if not hidden[i] and re.match(r"^##\s+Entries", l)), None)
+    if start is None:
+        raise SystemExit(f'{rel(BACKLOG)} has no "## Entries" section')
+    end = next((i for i in range(start + 1, len(blines))
+                if not hidden[i] and re.match(r"^##\s", blines[i])), len(blines))
+    at = end
+    while at - 1 > start and (not blines[at - 1].strip() or RULE.match(blines[at - 1])):
+        at -= 1
+    tail = blines[at:end]
+    return "\n".join(blines[:at] + [""] + moved + (["---", ""] if any(RULE.match(l) for l in tail) else [""])
+                     + blines[end:])
+
+
+def readiness(main):
+    """What still stands between the prototype and v1.0."""
+    active = main.active()
+    served = {}
+    for it in active:
+        for parent in [it.serves] + it.also:
+            served.setdefault(parent, []).append(it)
+    kids = lambda it, types: [c for c in served.get(it.id, []) if c.type in types]
+    features = [it for it in active if it.type == "feature"]
+    built, accepted = built_features(main), accepted_features()
+
+    def has_feature(s):
+        return bool(kids(s, ("feature",))) or any(has_feature(c) for c in kids(s, ("sub-solution",)))
+    r = {
+        "Objectives with no problem": [o for o in active if o.type == "objective" and o.status != "done"
+                                       and not kids(o, ("problem",))],
+        "Open problems with no solution": [q for q in active if q.type == "problem" and q.status != "solved"
+                                           and not kids(q, ("solution",))],
+        "Solutions with no feature": [s for s in active if s.type in ("solution", "sub-solution") and not has_feature(s)],
+        "Features with no \"Done when\"": [f for f in features if not f.done_when],
+        "Features not built yet": [f for f in features if f.id not in built],
+        "Features built but not accepted in a review": [f for f in features if f.id in built and f.id not in accepted],
+    }
+    blocking = ("Open problems with no solution", "Features not built yet", "Features built but not accepted in a review")
+    missing = [k for k in blocking if r[k]] + ([] if features else ["No features pushed yet"])
+    return r, not missing, missing
 
 
 # --------------------------------------------------------------------------- IDs, drafts, pushes, prototypes
@@ -1342,6 +1682,18 @@ def cmd_record_push(args):
     if any(i[0] == "error" for i in issues.items):
         print_issues(issues)
         raise SystemExit("\nNot recorded: fix the errors above first.")
+    latest_any = latest_version(exclude_reversed=False)
+    first_product = version_key(v) >= (1, 0) and not (latest_any and version_key(latest_any.name) >= (1, 0))
+    gaps = None
+    if first_product:
+        r, ready, missing = readiness(ctx.main)
+        if not ready and not args.accept_gaps:
+            for k in missing:
+                print(f"  {k}: " + ", ".join(it.id for it in r[k]))
+            raise SystemExit(f"\nNot recorded: {v} starts the real product, but the prototype does not cover the whole "
+                             "scope yet (see above and `status`). Close the gaps, or accept them in writing with "
+                             "--accept-gaps \"why\".")
+        gaps = args.accept_gaps
     target = VERSIONS / v
     prev_folder = latest_version()
     prev = Main(prev_folder, Issues()) if prev_folder else None
@@ -1361,8 +1713,9 @@ def cmd_record_push(args):
     # 2. the plan as pushed, and its map
     for doc in MAIN_DOCS:
         writer.write(target / doc, ctx.main.files[doc].text, allow_frozen=True)
-    if PROTOTYPE_BRIEF.exists():
-        writer.write(target / PROTOTYPE_BRIEF.name, TextFile(PROTOTYPE_BRIEF).text, allow_frozen=True)
+    for extra in (PROTOTYPE_BRIEF, CONSTRAINTS):
+        if extra.exists():
+            writer.write(target / extra.name, TextFile(extra).text, allow_frozen=True)
     writer.write(target / "mindmap.html", render_map(version_graph(v, ctx.main, prev)), allow_frozen=True)
     # 3. the log entry
     added, amended, retired = [], [], []
@@ -1380,13 +1733,26 @@ def cmd_record_push(args):
     entry = [f"## {v} ({today})", f"- Draft: {rel(target / d.path.name)}"]
     if args.note:
         entry.append(f"- Note: {' '.join(args.note.split())}")
+    entry.append(f"- Approved by: {' '.join(args.approved_by.split())} on {today}")
+    if gaps:
+        entry.append(f"- Gaps accepted: {' '.join(gaps.split())}")
     entry += [f"- Added: {names(added)}", f"- Amended: {names(amended)}", f"- Retired: {names(retired)}",
-              "- Prototype: not saved yet", "- Rollback: none"]
+              "- Released: not yet" if version_key(v) >= (1, 0) else "- Prototype: not saved yet", "- Rollback: none"]
     base = TextFile(LOG).text if LOG.exists() else "# Version log\n"
     writer.write(LOG, base.rstrip("\n") + "\n\n" + "\n".join(entry) + "\n")
+    if version_key(v) >= (1, 0):
+        for path, tpl in ((PRODUCT_DESIGN, TEMPLATE_DESIGN), (PRODUCT_REVIEW, TEMPLATE_REVIEW)):
+            if not path.exists() and tpl.exists():
+                writer.write(path, TextFile(tpl).text)
     print("Recorded " + v + ": " + ", ".join(writer.changed))
-    print(f"\nNext: commit everything, tag the commit {v}, and push the commit and the tag.\n"
-          f"Then build the prototype for {v} and save it with: python {TOOL} save-prototype {v}")
+    if version_key(v) >= (1, 0):
+        print(f"\nNext: commit everything, tag the commit {v}, and push the commit and the tag.\n"
+              f"Then build {v}'s features in product/ (fill in product/design.md first if it is new), review them "
+              f"in product/REVIEW.md, and release with: python {TOOL} record-release {v} --approved-by NAME")
+    else:
+        print(f"\nNext: commit everything, tag the commit {v}, and push the commit and the tag.\n"
+              f"Then build the prototype for {v}, review it in prototype/REVIEW.md, and save it with: "
+              f"python {TOOL} save-prototype {v}")
     return 0
 
 
@@ -1407,34 +1773,25 @@ def cmd_save_prototype(args):
     if issues.items:
         print_issues(issues)
         raise SystemExit("\nNot saved: fix the markers above first.")
+    review = read_review(PROTO_REVIEW)
+    if not review_filled(review):
+        raise SystemExit(f"Review first: fill in {rel(PROTO_REVIEW)} (date, who reviewed, features accepted, findings). "
+                         "Findings go to the backlog.")
+    if review.get("version") and review["version"] != v:
+        raise SystemExit(f"{rel(PROTO_REVIEW)} reviews {review['version']}, not {v}")
+    ctx = Context()
     writer = Writer(frozen=Context.frozen_paths())
     for f in sorted(files):
         writer.copy(f, target / f.relative_to(PROTOTYPE), allow_frozen=True)
-    # fill in the version's Prototype line in the log (with Rollback, the only lines that change in an entry)
+    if TEMPLATE_REVIEW.exists():
+        writer.write(PROTO_REVIEW, TextFile(TEMPLATE_REVIEW).text)
+    fixed = take_fixed_bugs(ctx, writer)
+    # fill in the version's lines in the log (with Released and Rollback, the only lines that change in an entry)
     today = datetime.date.today().isoformat()
-    line = f"- Prototype: saved on {today}"
-    lines = TextFile(LOG).text.split("\n")
-    hidden = mask(lines)
-    start = end = None
-    for i, ln in enumerate(lines):
-        m = None if hidden[i] else re.match(r"^##\s+(v[\d.]+)", ln)
-        if m and start is not None:
-            end = i
-            break
-        if m and m.group(1).rstrip(".") == v:
-            start = i
-    if start is None:
-        raise SystemExit(f"{rel(LOG)} has no entry for {v}")
-    body = range(start + 1, end if end is not None else len(lines))
-    proto = next((i for i in body if re.match(r"^-\s+Prototype:", lines[i])), None)
-    rollback = next((i for i in body if re.match(r"^-\s+Rollback:", lines[i])), None)
-    if proto is not None:
-        lines[proto] = line
-    elif rollback is not None:
-        lines.insert(rollback, line)
-    else:
-        lines.insert(max((i for i in body if lines[i].strip()), default=start) + 1, line)
-    writer.write(LOG, "\n".join(lines))
+    log = with_log_line(TextFile(LOG).text, v, "Prototype", f"saved on {today}")
+    if fixed:
+        log = with_log_line(log, v, "Fixed", "; ".join(fixed))
+    writer.write(LOG, log)
     print(f"Saved the prototype for {v}: {rel(target)}/ ({len(files)} files). Commit it.")
     return 0
 
@@ -1453,24 +1810,9 @@ def cmd_abandon_draft(args):
     # 1. the entries go back to the backlog, word for word, at the end of its Entries section
     moved = []
     for e in draft.entries:
-        lines = draft.lines[e.block.start:e.block.end]
-        while lines and (not lines[-1].strip() or RULE.match(lines[-1])):
-            lines = lines[:-1]
-        moved += lines + [""]
-    blines = ctx.backlog.lines
-    hidden = mask(blines)
-    start = next((i for i, l in enumerate(blines) if not hidden[i] and re.match(r"^##\s+Entries", l)), None)
-    if start is None:
-        raise SystemExit(f'{rel(BACKLOG)} has no "## Entries" section')
-    end = next((i for i in range(start + 1, len(blines))
-                if not hidden[i] and re.match(r"^##\s", blines[i])), len(blines))
-    at = end
-    while at - 1 > start and (not blines[at - 1].strip() or RULE.match(blines[at - 1])):
-        at -= 1
-    tail = blines[at:end]
-    new_backlog = blines[:at] + [""] + moved + (["---", ""] if any(RULE.match(l) for l in tail) else []) + blines[end:]
+        moved += entry_lines(draft, e) + [""]
     writer = Writer(frozen=Context.frozen_paths())
-    writer.write(BACKLOG, "\n".join(new_backlog))
+    writer.write(BACKLOG, backlog_with(ctx.backlog, moved))
     # 2. the draft is kept as a frozen record; its number is never reused
     today = datetime.date.today().isoformat()
     text = re.sub(r"^\*\*Status:\*\*.*$", f"**Status:** Retired on {today} (abandoned; its entries went back "
@@ -1483,6 +1825,301 @@ def cmd_abandon_draft(args):
     build(Context(), writer)
     print(f"Abandoned {draft.rel}: {len(draft.entries)} entries went back to the backlog; the draft is kept in "
           f"{rel(target)}. Updated: " + ", ".join(writer.changed))
+    return 0
+
+
+def cmd_status(args):
+    ctx = Context()
+    main = ctx.main
+    summary(ctx)
+    r, ready, missing = readiness(main)
+    accepted = accepted_features()
+    active = main.active()
+
+    quiet = []
+
+    def show(title, items):
+        if not items:
+            quiet.append(title[0].lower() + title[1:])
+            return
+        print(f"\n{title} ({len(items)}):")
+        for x in items:
+            print("  - " + x)
+    for k, items in r.items():
+        show(k, [f"{it.id} {it.title}" for it in items])
+    built = built_features(main)
+    waiting = [f for f in active if f.type == "feature" and f.id not in built and any(n not in built for n in f.needs)]
+    show("Features waiting for what they need", [f"{f.id} {f.title} (needs {', '.join(n for n in f.needs if n not in built)})"
+                                                 for f in waiting])
+    show("Accepted features", [f"{iid} ({where})" for iid, where in sorted(accepted.items())])
+    show("Open questions", [f"{it.id}: {' '.join(it.questions.split())}" for it in active if it.questions])
+    open_bugs = [text for _, done, text in bugs(ctx.backlog) if not done]
+    show("Open bugs", open_bugs)
+    if ctx.backlog:
+        counts = {}
+        for e in ctx.backlog.entries:
+            if e.type != "amendment":
+                counts[e.priority.capitalize() if e.priority in PRIORITIES else "No priority"] = \
+                    counts.get(e.priority.capitalize() if e.priority in PRIORITIES else "No priority", 0) + 1
+        print("\nBacklog: " + (", ".join(f"{n} {k}" for k, n in sorted(counts.items())) or "empty"))
+    if quiet:
+        print("\nNothing to report for: " + "; ".join(quiet) + ".")
+    problems = [q for q in active if q.type == "problem"]
+    objectives = [o for o in main.items.values() if o.type == "objective"]
+    print(f"Problems solved: {sum(q.status == 'solved' for q in problems)} of {len(problems)}  \u00b7  "
+          f"Objectives done: {sum(o.status == 'done' for o in objectives if not o.retired)} of "
+          f"{sum(not o.retired for o in objectives)}")
+    latest = latest_version()
+    if not (latest and version_key(latest.name) >= (1, 0)):
+        print("\nReady for v1.0: " + ("yes" if ready else "no (" + "; ".join(m.lower() for m in missing) + ")"))
+    if objectives and all(o.status == "done" or o.retired for o in objectives):
+        print("\nEvery objective is Done or Retired: close the project with a final version and a closing note.")
+    return 0
+
+
+FIELD_ORDER = ("description", "serves", "also serves", "needs", "done when", "design location", "label",
+               "open questions", "status")
+
+
+def field_lines(name, value):
+    parts = [p.strip() for p in str(value).split("\n")] or [""]
+    return [f"- {name}: {parts[0]}"] + ["  " + p for p in parts[1:] if p]
+
+
+def is_field(line):
+    m = FIELD.match(line)
+    return bool(m) and field_name(m.group(1)) is not None
+
+
+def set_field(texts, iid, name, value):
+    """Replace (or add) one field of a pushed item, in memory."""
+    m = Main(PLAN, Issues(), texts=texts)
+    it = m.items[iid]
+    lines, b, key = texts[it.doc].split("\n"), it.block, name.lower()
+    new = field_lines(name, value)
+    if key in b.fields:
+        i = b.fields[key][1]
+        j = i + 1
+        while j < b.end and lines[j].strip() and not is_field(lines[j]) and not HEADING.match(lines[j]) \
+                and not RULE.match(lines[j]):
+            j += 1
+        lines[i:j] = new
+    else:
+        at = b.fields["served by"][1] if "served by" in b.fields else \
+            max((k for k in range(b.start, b.end) if lines[k].strip() and not RULE.match(lines[k])), default=b.start) + 1
+        lines[at:at] = new
+    texts[it.doc] = "\n".join(lines)
+
+
+def region_end(lines, start, level):
+    """Where the part of solutions.md that belongs to the heading at `start` ends."""
+    hidden = mask(lines)
+    for i in range(start + 1, len(lines)):
+        h = None if hidden[i] else HEADING.match(lines[i])
+        if h and len(h.group(1)) <= level:
+            return i
+    return len(lines)
+
+
+def insert_block(lines, pos, block):
+    q = pos
+    while q > 0 and not lines[q - 1].strip():
+        q -= 1
+    after = [""] if q < len(lines) and lines[q].strip() else []
+    return lines[:q] + [""] + block + after + lines[q:]
+
+
+def finish(text):
+    return text.rstrip("\n") + "\n"
+
+
+def cmd_apply_draft(args):
+    ctx = Context()
+    if not ctx.open:
+        raise SystemExit("There is no open draft to apply")
+    first = ctx.open[0]
+    skip = {norm_title(s) for s in (args.skip or [])}
+    unknown = [s for s in (args.skip or []) if norm_title(s) not in first.by_title]
+    if unknown:
+        raise SystemExit("Not in the draft: " + ", ".join(f'"{s}"' for s in unknown))
+    ctx = Context(strict=first.path)
+    issues = run_checks(ctx)
+    draft, main = ctx.open[0], ctx.main
+    skipped = [e for e in draft.entries if e.ntitle in skip]
+    spans = [(e.block.start + 1, e.block.end) for e in skipped]
+    errors = Issues()
+    errors.items = [i for i in issues.items if i[0] == "error"
+                    and not (i[1] == draft.rel and any(a <= i[2] <= z for a, z in spans))]
+    if errors.items:
+        print_issues(errors)
+        raise SystemExit("\nNot applied: fix the errors above first (or send those entries back with --skip).")
+    approved = [e for e in draft.entries if e.ntitle not in skip]
+    for e in approved:
+        for r in ([e.home] if e.home else []) + e.also + e.needs:
+            if r[0] == "entry" and r[1].ntitle in skip:
+                raise SystemExit(f'"{e.title}" leans on "{r[1].title}", which is being sent back to the backlog')
+    new = [e for e in approved if e.type in TYPE_NAME]
+    amends = [e for e in approved if e.type == "amendment"]
+    counters = {k: int(v[2:]) for k, v in next_ids().items()}
+    rank = {"objective": 0, "problem": 1, "solution": 2, "sub-solution": 3, "feature": 4}
+    prefix = {"objective": "O", "problem": "P", "solution": "S", "sub-solution": "S", "feature": "F"}
+    newid = {}
+    for e in sorted(new, key=lambda e: (rank[e.type], e.index)):
+        k = prefix[e.type]
+        newid[e.key] = f"{k}-{counters[k]:03d}"
+        counters[k] += 1
+
+    def rid(r):
+        return r[1].id if r[0] == "item" else newid[r[1].key]
+
+    def render(e):
+        b = e.block
+        level = {"objective": 2, "problem": 2, "solution": 2, "sub-solution": 3, "feature": 4}[e.type]
+        out = [f"{'#' * level} {newid[e.key]}: {e.title}"] + field_lines("Description", b.get("description"))
+        if e.type != "objective":
+            out += [f"- Serves: {rid(e.home)}", f"- Also serves: {', '.join(rid(r) for r in e.also) or 'none'}"]
+        if e.type == "feature":
+            if e.needs:
+                out.append(f"- Needs: {', '.join(rid(r) for r in e.needs)}")
+            out += field_lines("Done when", b.get("done when")) + field_lines("Design location", b.get("design location"))
+        if b.get("label").strip():
+            out.append(f"- Label: {b.get('label').strip()}")
+        if open_questions(b.get("open questions")):
+            out += field_lines("Open questions", b.get("open questions"))
+        if e.type in ("objective", "problem"):
+            out.append("- Status: Open")
+        return out
+
+    texts = {doc: main.files[doc].text for doc in MAIN_DOCS}
+    # 1. new objectives and problems go at the end of their documents
+    for kind, doc in (("objective", "objectives.md"), ("problem", "problems.md")):
+        lines = texts[doc].split("\n")
+        for e in [e for e in new if e.type == kind]:
+            lines = insert_block(lines, len(lines), render(e))
+        texts[doc] = finish("\n".join(lines))
+    # 2. solutions, sub-solutions and features go under their home parent in solutions.md
+    children = {}
+    for e in new:
+        if e.type in ("sub-solution", "feature") and e.home[0] == "entry":
+            children.setdefault(e.home[1].key, []).append(e)
+
+    def subtree(e):
+        out = render(e)
+        for c in sorted(children.get(e.key, []), key=lambda c: (rank[c.type], c.index)):
+            out += [""] + subtree(c)
+        return out
+    for e in sorted([e for e in new if e.type == "solution"], key=lambda e: e.index):
+        lines = texts["solutions.md"].split("\n")
+        texts["solutions.md"] = finish("\n".join(insert_block(lines, len(lines), subtree(e))))
+    for e in sorted([e for e in new if e.type in ("sub-solution", "feature") and e.home[0] == "item"],
+                    key=lambda e: (rank[e.type], e.index)):
+        parent = Main(PLAN, Issues(), texts=texts).items[e.home[1].id]
+        lines = texts["solutions.md"].split("\n")
+        at = region_end(lines, parent.block.start, parent.block.level)
+        texts["solutions.md"] = finish("\n".join(insert_block(lines, at, subtree(e))))
+    # 3. amendments change pushed items in place
+    for e in amends:
+        iid, b = e.amends.id, e.block
+        cur = Main(PLAN, Issues(), texts=texts).items[iid]
+        if b.get("new text").strip():
+            set_field(texts, iid, "Description", b.get("new text"))
+        if e.home:
+            set_field(texts, iid, "Serves", rid(e.home))
+        if e.also or e.remove:
+            also = [a for a in cur.also if a not in e.remove] + [rid(r) for r in e.also if rid(r) not in cur.also]
+            set_field(texts, iid, "Also serves", ", ".join(also) or "none")
+        if e.needs:
+            set_field(texts, iid, "Needs", ", ".join(rid(r) for r in e.needs))
+        for name in ("Done when", "Design location", "Label", "Open questions"):
+            if b.get(name.lower()).strip():
+                set_field(texts, iid, name, b.get(name.lower()))
+        if e.status:
+            set_field(texts, iid, "Status", e.status.capitalize())
+        if e.retire:
+            set_field(texts, iid, "Status", "Retired")
+        if e.home and cur.type == "feature":  # a moved feature also moves under its new home parent
+            it = Main(PLAN, Issues(), texts=texts).items[iid]
+            lines = texts[it.doc].split("\n")
+            block = lines[it.block.start:it.block.end]
+            while block and not block[-1].strip():
+                block = block[:-1]
+            del lines[it.block.start:it.block.end]
+            texts[it.doc] = "\n".join(lines)
+            parent = Main(PLAN, Issues(), texts=texts).items[rid(e.home)]
+            lines = texts[it.doc].split("\n")
+            at = region_end(lines, parent.block.start, parent.block.level)
+            texts[it.doc] = finish("\n".join(insert_block(lines, at, block)))
+    # 4. entries not approved go back to the backlog
+    writer = Writer(dry=args.dry_run, frozen=Context.frozen_paths())
+    if skipped:
+        moved = []
+        pushed_titles = {e.ntitle: newid[e.key] for e in new}
+        for e in skipped:
+            for ln in entry_lines(draft, e):
+                fm = FIELD.match(ln)
+                if fm and field_name(fm.group(1)) in ("serves", "also serves", "needs"):
+                    ln = QUOTED.sub(lambda m: pushed_titles.get(norm_title(m.group(1) or m.group(2)), m.group(0)), ln)
+                moved.append(ln)
+            moved.append("")
+        writer.write(BACKLOG, backlog_with(ctx.backlog, moved))
+        lines = list(draft.lines)
+        for e in sorted(skipped, key=lambda e: e.block.start, reverse=True):
+            del lines[e.block.start:e.block.end]
+        writer.write(draft.path, "\n".join(lines))
+    for doc in MAIN_DOCS:
+        writer.write(PLAN / doc, texts[doc])
+    print("New IDs: " + ("; ".join(f"{newid[e.key]} {e.title}" for e in sorted(new, key=lambda e: (rank[e.type], e.index)))
+                         or "none"))
+    print("Amended: " + ("; ".join(e.amends.id for e in amends) or "none"))
+    print("Sent back to the backlog: " + ("; ".join(e.title for e in skipped) or "none"))
+    if args.dry_run:
+        print("\nDry run: nothing was written.")
+        return 0
+    build(Context(), writer)
+    print("Updated: " + ", ".join(writer.changed))
+    v = draft.version or "vX"
+    print(f"\nNext: look over plan/ (git diff plan/), run check, then: python {TOOL} record-push {v} --approved-by NAME")
+    return 0
+
+
+def cmd_record_release(args):
+    v = args.version
+    if not VERSION_RE.match(v) or version_key(v) < (1, 0):
+        raise SystemExit("Releases start at v1.0 (the prototype is saved with save-prototype before that)")
+    if not (VERSIONS / v).is_dir():
+        raise SystemExit(f"{v} is not pushed")
+    log = TextFile(LOG).text
+    done = log_value(log, v, "Released")
+    if done is None or not done.lower().startswith("not yet"):
+        raise SystemExit(f"{v} is already released ({done})" if done else f"{rel(LOG)} has no Released line for {v}")
+    target = VERSIONS / v / "review.md"
+    if target.exists():
+        raise SystemExit(f"{rel(target)} already exists")
+    review = read_review(PRODUCT_REVIEW)
+    if not review_filled(review):
+        raise SystemExit(f"Review first: fill in {rel(PRODUCT_REVIEW)} (date, who reviewed, features accepted, findings). "
+                         "Findings go to the backlog.")
+    if review.get("version") and review["version"] != v:
+        raise SystemExit(f"{rel(PRODUCT_REVIEW)} reviews {review['version']}, not {v}")
+    ctx = Context()
+    issues = Issues()
+    product_id_issues(ctx.main, issues)
+    if issues.items:
+        print_issues(issues)
+        raise SystemExit("\nNot released: fix the code's feature IDs above first.")
+    writer = Writer(frozen=Context.frozen_paths())
+    writer.copy(PRODUCT_REVIEW, target, allow_frozen=True)
+    if TEMPLATE_REVIEW.exists():
+        writer.write(PRODUCT_REVIEW, TextFile(TEMPLATE_REVIEW).text)
+    fixed = take_fixed_bugs(ctx, writer)
+    today = datetime.date.today().isoformat()
+    log = with_log_line(log, v, "Released", f"{today}, approved by {' '.join(args.approved_by.split())}")
+    if fixed:
+        before = log_value(log, v, "Fixed")
+        log = with_log_line(log, v, "Fixed", "; ".join(([before] if before else []) + fixed))
+    writer.write(LOG, log)
+    print(f"Released {v}: " + ", ".join(writer.changed))
+    print(f"\nNext: commit, tag the commit {v}-release, and push the commit and the tag.")
     return 0
 
 
@@ -1504,6 +2141,15 @@ def main(argv=None):
     r.add_argument("version")
     r.add_argument("--draft", metavar="DRAFT", help="the draft being pushed (default: the open draft)")
     r.add_argument("--note", metavar="TEXT", help="one line for the log about what this version is")
+    r.add_argument("--approved-by", metavar="NAME", required=True, help="who gave the green light")
+    r.add_argument("--accept-gaps", metavar="WHY", help="for v1.0 only: go ahead although the prototype has gaps, and why")
+    sub.add_parser("status", help="what is covered, built, accepted, open, and still missing")
+    ap = sub.add_parser("apply-draft", help="write the open draft's entries into plan/ with new IDs")
+    ap.add_argument("--skip", metavar="TITLE", action="append", help="an entry not approved: it goes back to the backlog")
+    ap.add_argument("--dry-run", action="store_true", help="show the new IDs without writing")
+    rr = sub.add_parser("record-release", help="release a version of the product (from v1.0)")
+    rr.add_argument("version")
+    rr.add_argument("--approved-by", metavar="NAME", required=True, help="who approved the release")
     s = sub.add_parser("save-prototype", help="save the live prototype into versions/VERSION/prototype/")
     s.add_argument("version")
     a = sub.add_parser("abandon-draft", help="give up the open draft; its entries go back to the backlog")
@@ -1511,7 +2157,8 @@ def main(argv=None):
     args = p.parse_args(argv)
     return {"check": cmd_check, "build": cmd_build, "next-ids": cmd_next_ids, "new-draft": cmd_new_draft,
             "record-push": cmd_record_push, "save-prototype": cmd_save_prototype,
-            "abandon-draft": cmd_abandon_draft}[args.cmd](args)
+            "abandon-draft": cmd_abandon_draft, "status": cmd_status, "apply-draft": cmd_apply_draft,
+            "record-release": cmd_record_release}[args.cmd](args)
 
 
 if __name__ == "__main__":
